@@ -50,12 +50,37 @@
     }
   };
 
+  Object.assign(translations.en, {
+    config: "Config", expiry: "Expiry", save_card: "Save card", cards_not_loaded: "Cards are not loaded.",
+    three_ds_completion: "3DS Completion", request_flow: "Request flow", class_name: "Class", three_ds_auto: "3DS Auto",
+    lookup_payment: "Lookup payment", ready: "Ready", configured: "Configured", local: "Local", error: "Error",
+    running: "Running", completed: "Completed", attention: "Attention", failed: "Failed", add_card: "Add card",
+    loading_options: "Loading installment options", runtime_config_not_loaded: "Runtime config not loaded", config_unavailable: "Config unavailable",
+    remove: "Remove", selection_updated: "Selection updated.", starting: "Starting parallel run",
+    manual_limit: "Manual selection can include at most 150 test items.", report_check: "Checking report status",
+    loading_evidence: "Loading evidence", view: "View"
+  });
+  Object.assign(translations.tr, {
+    config: "Yapılandırma", expiry: "Son kullanma", save_card: "Kartı kaydet", cards_not_loaded: "Kartlar yüklenemedi.",
+    three_ds_completion: "3DS Tamamlama", request_flow: "İstek akışı", class_name: "Sınıf", three_ds_auto: "3DS Otomasyonu",
+    lookup_payment: "Ödemeyi sorgula", ready: "Hazır", configured: "Yapılandırıldı", local: "Yerel", error: "Hata",
+    running: "Çalışıyor", completed: "Tamamlandı", attention: "Dikkat", failed: "Başarısız", add_card: "Kart ekle",
+    loading_options: "Taksit seçenekleri yükleniyor", runtime_config_not_loaded: "Çalışma zamanı yapılandırması yüklenmedi", config_unavailable: "Yapılandırmaya ulaşılamıyor",
+    remove: "Kaldır", selection_updated: "Seçim güncellendi.", starting: "Paralel test başlatılıyor",
+    manual_limit: "Manuel seçim en fazla 150 test içerebilir.", report_check: "Rapor durumu kontrol ediliyor",
+    loading_evidence: "Kanıt yükleniyor", view: "Görüntüle"
+  });
+
   const language = localStorage.getItem("paynkolay-language") || "en";
   let currentLanguage = translations[language] ? language : "en";
 
   function translate(key) { return translations[currentLanguage][key] || translations.en[key] || key; }
   function translateStaticText() {
-    const englishToKey = new Map(Object.keys(translations.en).map((key) => [translations.en[key], key]));
+    const textToKey = new Map();
+    Object.keys(translations.en).forEach((key) => {
+      textToKey.set(translations.en[key], key);
+      textToKey.set(translations.tr[key], key);
+    });
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
@@ -63,7 +88,7 @@
       const parent = node.parentElement;
       if (!parent || ["SCRIPT", "STYLE", "CODE"].includes(parent.tagName)) return;
       const original = node.__paynkolayI18nOriginal || node.textContent.trim();
-      const key = englishToKey.get(original);
+      const key = textToKey.get(original);
       if (!key) return;
       node.__paynkolayI18nOriginal = original;
       const translated = translate(key);
