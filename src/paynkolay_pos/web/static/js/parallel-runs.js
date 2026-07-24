@@ -180,7 +180,7 @@
           window.PaynkolayI18n.humanizeStatus(item.status),
           window.PaynkolayI18n.humanizeStatus(item.classification),
           window.PaynkolayI18n.humanizeStatus(item.payment_list_status || item.payment_list_error || "-"),
-          formatAutomationSummary(item.three_ds_automation),
+          formatAutomationSummary(item.three_ds_automation, item.classification),
           formatDuration(item.duration_ms),
         ];
         for (const value of values) {
@@ -220,7 +220,7 @@
     return `${completedItems}/${denominator} (${rate.toFixed(1)}%)`;
   }
 
-  function formatAutomationSummary(automation) {
+  function formatAutomationSummary(automation, classification) {
     if (!automation) {
       return "-";
     }
@@ -232,7 +232,16 @@
       source,
       window.PaynkolayI18n.humanizeStatus(automation.reason),
     ].filter(Boolean);
-    return details.join(" ");
+    const summary = details.join(" ");
+    if (window.PaynkolayI18n.language === "tr" && classification !== "completed") {
+      if (classification === "payment_list_missing") {
+        return `${summary} · OTP başarılı; ödeme sonucu doğrulanamadı`;
+      }
+      if (classification === "awaiting_provider_finalization") {
+        return `${summary} · OTP başarılı; sağlayıcı sonucu bekleniyor`;
+      }
+    }
+    return summary;
   }
 
   function startParallelPolling(runId) {
