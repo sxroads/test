@@ -433,8 +433,64 @@ select {
 }
 
 .parallel-controls {
-  grid-template-columns: minmax(180px, 1.2fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr)
-    minmax(150px, 0.8fr);
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+}
+
+.parallel-profile-field {
+  margin: 16px 20px 0;
+  padding: 0;
+  border: 0;
+}
+
+.parallel-profile-field legend {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.segmented-control {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f4f6f8;
+}
+
+.segmented-control label {
+  cursor: pointer;
+}
+
+.segmented-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.segmented-control span {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.segmented-control input:checked + span {
+  color: #ffffff;
+  background: var(--accent);
+}
+
+.segmented-control input:focus-visible + span {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
 }
 
 .parallel-manual-controls {
@@ -472,7 +528,7 @@ select {
 
 .parallel-results-table {
   width: 100%;
-  min-width: 100%;
+  min-width: 900px;
 }
 
 .report-history-table {
@@ -500,7 +556,7 @@ select {
 
 .parallel-results-table th:nth-child(1),
 .parallel-results-table td:nth-child(1) {
-  width: 28%;
+  width: 26%;
 }
 
 .parallel-results-table th:nth-child(2),
@@ -526,7 +582,7 @@ select {
 
 .parallel-results-table th:nth-child(6),
 .parallel-results-table td:nth-child(6) {
-  width: 8%;
+  width: 10%;
 }
 
 .parallel-results-table th,

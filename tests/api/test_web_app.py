@@ -379,10 +379,15 @@ async def test_parallel_page_renders_parallel_run_screen(client: httpx.AsyncClie
     assert 'id="parallel-evidence-path"' in response.text
     assert 'id="parallel-success-rate"' in response.text
     assert 'id="parallel-concurrency" type="number" min="1" max="50"' in response.text
+    assert 'name="parallel-profile" value="stable" checked' in response.text
+    assert 'name="parallel-profile" value="load"' in response.text
+    assert 'id="parallel-acs-concurrency"' in response.text
+    assert 'id="parallel-acs-peak"' in response.text
+    assert 'id="parallel-throughput"' in response.text
     assert 'id="parallel-random-count" type="number" min="1" max="50"' in response.text
     assert 'id="parallel-repeat-count" type="number" min="1" max="50"' in response.text
     assert "Parallel 3D Secure runs complete automatically" in response.text
-    assert "/static/js/parallel-runs.js?v=parallel-limit-50" in response.text
+    assert "/static/js/parallel-runs.js?v=adaptive-acs-profiles" in response.text
 
 
 @pytest.mark.api
@@ -1245,6 +1250,14 @@ async def test_parallel_run_completes_3ds_item_after_automation_submit(
     assert payload["status"] == "completed"
     assert payload["items"][0]["classification"] == "completed"
     assert payload["items"][0]["payment_list_status"] == "captured"
+    assert all(
+        value is not None and value >= 0
+        for value in payload["items"][0]["stage_timings"].values()
+    )
+    assert payload["metrics"]["elapsed_ms"] is not None
+    assert payload["metrics"]["throughput_per_second"] is not None
+    assert payload["metrics"]["peak_active_items"] == 1
+    assert payload["acs_scheduler"]["profile"] == "stable"
     assert payload["items"][0]["three_ds_automation"] == {
         "status": "completed",
         "submitted": True,
@@ -1301,6 +1314,8 @@ async def test_parallel_run_limits_automatic_3ds_browser_concurrency(
             "amount": "50.00",
             "currency": "TRY",
             "concurrency": 10,
+            "execution_profile": "load",
+            "acs_concurrency": 4,
             "auto_complete_3ds": True,
             "manual_cards": [{"alias": "parallel_3ds", "repeat_count": 10}],
         },
@@ -1311,7 +1326,8 @@ async def test_parallel_run_limits_automatic_3ds_browser_concurrency(
     assert payload["status"] == "completed"
     assert payload["completed"] == 10
     assert len(fake_automator.calls) == 10
-    assert fake_automator.max_active_calls == parallel_runs.MAX_PARALLEL_3DS_AUTOMATIONS
+    assert fake_automator.max_active_calls == 4
+    assert payload["acs_scheduler"]["peak_concurrency"] == 4
 
 
 @pytest.mark.api

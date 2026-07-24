@@ -9,11 +9,13 @@ from collections import Counter
 from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
+from time import perf_counter
 from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 
+from paynkolay_pos.api.acs_scheduler import AdaptiveAcsScheduler
 from paynkolay_pos.api.dependencies import (
     SupportsThreeDSAutomator,
     get_parallel_run_store,
@@ -73,7 +75,6 @@ FINAL_PAYMENT_LIST_STATUSES = {
     PaymentStatus.FAILED,
 }
 SUBMITTED_3DS_PAYMENT_LIST_RETRY_DELAYS = (2.0, 5.0, 10.0, 20.0)
-MAX_PARALLEL_3DS_AUTOMATIONS = 4
 
 PaymentInitializerDependency = Annotated[
     SupportsPaymentInitializer,
@@ -117,7 +118,9 @@ async def create_parallel_run(
     run = ParallelRunState(
         run_id=run_id,
         mode=request.mode,
+        execution_profile=request.execution_profile,
         concurrency=request.concurrency,
+        acs_concurrency=request.effective_acs_concurrency,
         items=items,
         status="running",
         started_at=utc_now(),
@@ -184,10 +187,15 @@ async def _execute_parallel_run(
     run_store: ParallelRunStore,
 ) -> None:
     run = await run_store.get(run_id)
-    semaphore = asyncio.Semaphore(run.concurrency)
-    three_ds_semaphore = asyncio.Semaphore(
-        min(run.concurrency, MAX_PARALLEL_3DS_AUTOMATIONS)
+    initialization_semaphore = asyncio.Semaphore(run.concurrency)
+    payment_list_semaphore = asyncio.Semaphore(
+        run.concurrency if run.execution_profile == "load" else min(run.concurrency, 10)
     )
+    acs_scheduler = AdaptiveAcsScheduler(
+        profile=run.execution_profile,
+        requested_concurrency=run.acs_concurrency,
+    )
+    await _sync_acs_scheduler(run_store, run_id, acs_scheduler)
     serial_3ds_locks = _serial_3ds_locks_for_run(run.items, cards_by_alias)
     tasks = [
         _execute_item(
@@ -203,13 +211,15 @@ async def _execute_parallel_run(
             session_store=session_store,
             three_ds_form_store=three_ds_form_store,
             run_store=run_store,
-            semaphore=semaphore,
-            three_ds_semaphore=three_ds_semaphore,
+            initialization_semaphore=initialization_semaphore,
+            payment_list_semaphore=payment_list_semaphore,
+            acs_scheduler=acs_scheduler,
             serial_3ds_locks=serial_3ds_locks,
         )
         for item in run.items
     ]
     task_results = await asyncio.gather(*tasks, return_exceptions=True)
+    await _sync_acs_scheduler(run_store, run_id, acs_scheduler)
     await run_store.mutate(run_id, lambda run: _record_unhandled_task_errors(run, task_results))
     await run_store.mutate(run_id, _finish_run)
 
@@ -228,15 +238,33 @@ async def _execute_item(
     session_store: PaymentSessionStore,
     three_ds_form_store: ThreeDSFormStore,
     run_store: ParallelRunStore,
-    semaphore: asyncio.Semaphore,
-    three_ds_semaphore: asyncio.Semaphore,
+    initialization_semaphore: asyncio.Semaphore,
+    payment_list_semaphore: asyncio.Semaphore,
+    acs_scheduler: AdaptiveAcsScheduler,
     serial_3ds_locks: dict[str, asyncio.Lock],
 ) -> None:
-    async with semaphore:
-        await run_store.mutate(run_id, lambda run: _mark_item_running(run, item.item_id))
-        serial_lock = serial_3ds_locks.get(item.card_alias)
-        try:
-            if serial_lock is None:
+    serial_lock = serial_3ds_locks.get(item.card_alias)
+    try:
+        if serial_lock is None:
+            await _execute_item_attempt(
+                run_id=run_id,
+                item=item,
+                card=card,
+                amount=amount,
+                currency=currency,
+                client_host=client_host,
+                auto_complete_3ds=auto_complete_3ds,
+                initializer=initializer,
+                automator=automator,
+                session_store=session_store,
+                three_ds_form_store=three_ds_form_store,
+                run_store=run_store,
+                initialization_semaphore=initialization_semaphore,
+                payment_list_semaphore=payment_list_semaphore,
+                acs_scheduler=acs_scheduler,
+            )
+        else:
+            async with serial_lock:
                 await _execute_item_attempt(
                     run_id=run_id,
                     item=item,
@@ -250,57 +278,42 @@ async def _execute_item(
                     session_store=session_store,
                     three_ds_form_store=three_ds_form_store,
                     run_store=run_store,
-                    three_ds_semaphore=three_ds_semaphore,
+                    initialization_semaphore=initialization_semaphore,
+                    payment_list_semaphore=payment_list_semaphore,
+                    acs_scheduler=acs_scheduler,
                 )
-            else:
-                async with serial_lock:
-                    await _execute_item_attempt(
-                        run_id=run_id,
-                        item=item,
-                        card=card,
-                        amount=amount,
-                        currency=currency,
-                        client_host=client_host,
-                        auto_complete_3ds=auto_complete_3ds,
-                        initializer=initializer,
-                        automator=automator,
-                        session_store=session_store,
-                        three_ds_form_store=three_ds_form_store,
-                        run_store=run_store,
-                        three_ds_semaphore=three_ds_semaphore,
-                    )
-        except PaymentProviderInitializationError as exc:
-            classification = _classify_initialization_error(exc)
-            error_message = str(exc)
-            await _mark_session_failed(
-                session_store,
-                item.order_id,
-                "provider payment initialization failed",
-            )
-            await run_store.mutate(
-                run_id,
-                lambda run: _mark_item_failed(
-                    run,
-                    item.item_id,
-                    classification=classification,
-                    error_message=error_message,
-                ),
-            )
-        except Exception as exc:
-            error_message = f"{type(exc).__name__}: {exc}"
-            await _mark_session_failed(
-                session_store,
-                item.order_id,
-                error_message,
-            )
-            await run_store.mutate(
-                run_id,
-                lambda run: _mark_item_failed(
-                    run,
-                    item.item_id,
-                    classification="framework_error",
-                    error_message=error_message,
-                ),
+    except PaymentProviderInitializationError as exc:
+        classification = _classify_initialization_error(exc)
+        error_message = str(exc)
+        await _mark_session_failed(
+            session_store,
+            item.order_id,
+            "provider payment initialization failed",
+        )
+        await run_store.mutate(
+            run_id,
+            lambda run: _mark_item_failed(
+                run,
+                item.item_id,
+                classification=classification,
+                error_message=error_message,
+            ),
+        )
+    except Exception as exc:
+        error_message = f"{type(exc).__name__}: {exc}"
+        await _mark_session_failed(
+            session_store,
+            item.order_id,
+            error_message,
+        )
+        await run_store.mutate(
+            run_id,
+            lambda run: _mark_item_failed(
+                run,
+                item.item_id,
+                classification="framework_error",
+                error_message=error_message,
+            ),
         )
 
 
@@ -318,7 +331,9 @@ async def _execute_item_attempt(
     session_store: PaymentSessionStore,
     three_ds_form_store: ThreeDSFormStore,
     run_store: ParallelRunStore,
-    three_ds_semaphore: asyncio.Semaphore,
+    initialization_semaphore: asyncio.Semaphore,
+    payment_list_semaphore: asyncio.Semaphore,
+    acs_scheduler: AdaptiveAcsScheduler,
 ) -> None:
     request = _payment_form_request(
         card=card,
@@ -334,11 +349,15 @@ async def _execute_item_attempt(
         requires_3ds=request.requires_3ds,
         installment_count=request.installment_count,
     )
-    outcome = await initializer.initialize(
-        request,
-        order_id=item.order_id,
-        card_holder_ip=client_host,
-    )
+    initialization_started = perf_counter()
+    async with initialization_semaphore:
+        await run_store.mutate(run_id, lambda run: _mark_item_running(run, item.item_id))
+        outcome = await initializer.initialize(
+            request,
+            order_id=item.order_id,
+            card_holder_ip=client_host,
+        )
+    initialization_ms = _elapsed_ms(initialization_started)
     await _record_provider_outcome(
         run_id=run_id,
         item_id=item.item_id,
@@ -351,7 +370,9 @@ async def _execute_item_attempt(
         three_ds_form_store=three_ds_form_store,
         run_store=run_store,
         currency=request.currency,
-        three_ds_semaphore=three_ds_semaphore,
+        initialization_ms=initialization_ms,
+        payment_list_semaphore=payment_list_semaphore,
+        acs_scheduler=acs_scheduler,
     )
 
 
@@ -383,7 +404,9 @@ async def _record_provider_outcome(
     three_ds_form_store: ThreeDSFormStore,
     run_store: ParallelRunStore,
     currency: Currency,
-    three_ds_semaphore: asyncio.Semaphore,
+    initialization_ms: int,
+    payment_list_semaphore: asyncio.Semaphore,
+    acs_scheduler: AdaptiveAcsScheduler,
 ) -> None:
     provider_request = _provider_request_summary(outcome)
     provider_result = outcome.provider_result
@@ -406,6 +429,7 @@ async def _record_provider_outcome(
                     item_id,
                     provider_request=provider_request,
                     classification="pending_3ds",
+                    initialization_ms=initialization_ms,
                     three_ds_url=f"/payments/{order_id}/three-ds",
                 ),
             )
@@ -414,13 +438,17 @@ async def _record_provider_outcome(
             order_id,
             ThreeDSAutomationSummary(status="running", reason="3DS automation started"),
         )
-        async with three_ds_semaphore:
-            automation_result = await automator.complete(
+        acs_execution = await acs_scheduler.execute(
+            card.alias,
+            lambda: automator.complete(
                 html=provider_result.bank_request_message,
                 brand=card.brand,
                 configured_otp=card.expected_otp,
                 callback_url=outcome.success_url,
-            )
+            ),
+        )
+        automation_result = acs_execution.result
+        await _sync_acs_scheduler(run_store, run_id, acs_scheduler)
         automation_summary = ThreeDSAutomationSummary.model_validate(
             automation_result.summary()
         )
@@ -433,19 +461,25 @@ async def _record_provider_outcome(
                     item_id,
                     provider_request=provider_request,
                     classification=_classification_for_acs_automation(automation_result),
+                    initialization_ms=initialization_ms,
+                    acs_wait_ms=acs_execution.wait_ms,
+                    acs_duration_ms=acs_execution.duration_ms,
                     three_ds_url=f"/payments/{order_id}/three-ds",
                     three_ds_automation=automation_summary,
                 ),
             )
             return
 
-        session = await _verify_parallel_payment_list(
-            order_id=order_id,
-            currency=currency,
-            initializer=initializer,
-            session_store=session_store,
-            retry_delays=SUBMITTED_3DS_PAYMENT_LIST_RETRY_DELAYS,
-        )
+        payment_list_started = perf_counter()
+        async with payment_list_semaphore:
+            session = await _verify_parallel_payment_list(
+                order_id=order_id,
+                currency=currency,
+                initializer=initializer,
+                session_store=session_store,
+                retry_delays=SUBMITTED_3DS_PAYMENT_LIST_RETRY_DELAYS,
+            )
+        payment_list_ms = _elapsed_ms(payment_list_started)
         classification = _classification_for_payment_list_status(
             session.payment_list_status.value if session.payment_list_status is not None else None
         )
@@ -462,6 +496,10 @@ async def _record_provider_outcome(
                 item_id,
                 provider_request=provider_request,
                 classification=classification,
+                initialization_ms=initialization_ms,
+                acs_wait_ms=acs_execution.wait_ms,
+                acs_duration_ms=acs_execution.duration_ms,
+                payment_list_ms=payment_list_ms,
                 payment_list=PaymentListStatusSummary.from_session(session),
                 payment_list_status=(
                     session.payment_list_status.value
@@ -492,20 +530,24 @@ async def _record_provider_outcome(
                 provider_result.response_data if not provider_result.successful else None
             ),
         )
+        payment_list_started = perf_counter()
         try:
-            session = await session_store.update_payment_list_status(
-                outcome.payment_request.order_id,
-                await verify_transaction_status_with_retry(
+            async with payment_list_semaphore:
+                status_response = await verify_transaction_status_with_retry(
                     initializer,
                     outcome.payment_request.order_id,
                     currency=currency,
-                ),
+                )
+            session = await session_store.update_payment_list_status(
+                outcome.payment_request.order_id,
+                status_response,
             )
         except PaymentProviderStatusVerificationError as exc:
             session = await session_store.update_payment_list_error(
                 outcome.payment_request.order_id,
                 str(exc),
             )
+        payment_list_ms = _elapsed_ms(payment_list_started)
         await run_store.mutate(
             run_id,
             lambda run: _mark_item_completed(
@@ -514,6 +556,8 @@ async def _record_provider_outcome(
                 provider_request=provider_request,
                 provider_response_code=provider_result.response_code,
                 provider_response_data=provider_result.response_data,
+                initialization_ms=initialization_ms,
+                payment_list_ms=payment_list_ms,
                 payment_list=PaymentListStatusSummary.from_session(session),
                 payment_list_status=(
                     session.payment_list_status.value
@@ -547,6 +591,22 @@ async def _verify_parallel_payment_list(
         )
     except PaymentProviderStatusVerificationError as exc:
         return await session_store.update_payment_list_error(order_id, str(exc))
+
+
+async def _sync_acs_scheduler(
+    run_store: ParallelRunStore,
+    run_id: str,
+    scheduler: AdaptiveAcsScheduler,
+) -> None:
+    snapshot = scheduler.snapshot()
+    await run_store.mutate(
+        run_id,
+        lambda run: setattr(run, "acs_scheduler", snapshot),
+    )
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return max(0, int((perf_counter() - started_at) * 1000))
 
 
 def _load_card_map() -> dict[str, TestCard]:
@@ -661,6 +721,8 @@ def _mark_item_running(run: ParallelRunState, item_id: str) -> None:
     item.status = "running"
     item.classification = "running"
     item.started_at = utc_now()
+    active_items = sum(candidate.status == "running" for candidate in run.items)
+    run.peak_active_items = max(run.peak_active_items, active_items)
 
 
 def _mark_item_completed(
@@ -676,6 +738,10 @@ def _mark_item_completed(
     payment_list_error: str | None = None,
     three_ds_automation: ThreeDSAutomationSummary | None = None,
     three_ds_url: str | None = None,
+    initialization_ms: int | None = None,
+    acs_wait_ms: int | None = None,
+    acs_duration_ms: int | None = None,
+    payment_list_ms: int | None = None,
 ) -> None:
     item = _item(run, item_id)
     item.status = "completed"
@@ -688,6 +754,10 @@ def _mark_item_completed(
     item.payment_list_error = payment_list_error
     item.three_ds_automation = three_ds_automation
     item.three_ds_url = three_ds_url
+    item.initialization_ms = initialization_ms
+    item.acs_wait_ms = acs_wait_ms
+    item.acs_duration_ms = acs_duration_ms
+    item.payment_list_ms = payment_list_ms
     item.finished_at = utc_now()
 
 

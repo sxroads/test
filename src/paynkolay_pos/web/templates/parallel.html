@@ -7,7 +7,7 @@
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/css/app.css">
     <script src="/static/js/api-client.js" defer></script>
-    <script src="/static/js/parallel-runs.js?v=parallel-limit-50" defer></script>
+    <script src="/static/js/parallel-runs.js?v=adaptive-acs-profiles" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -29,6 +29,19 @@
             <h2>Parallel Test</h2>
             <span class="status-pill neutral" id="parallel-run-status">Idle</span>
           </div>
+          <fieldset class="field parallel-profile-field">
+            <legend>Execution profile</legend>
+            <div class="segmented-control">
+              <label>
+                <input type="radio" name="parallel-profile" value="stable" checked>
+                <span>Stable Demo</span>
+              </label>
+              <label>
+                <input type="radio" name="parallel-profile" value="load">
+                <span>Load Test</span>
+              </label>
+            </div>
+          </fieldset>
           <div class="card-add-form parallel-controls">
             <label class="field">
               <span>Mode</span>
@@ -44,6 +57,10 @@
             <label class="field">
               <span>Concurrency</span>
               <input id="parallel-concurrency" type="number" min="1" max="50" value="10">
+            </label>
+            <label class="field hidden" id="parallel-acs-concurrency-field">
+              <span>ACS concurrency</span>
+              <input id="parallel-acs-concurrency" type="number" min="1" max="50" value="10">
             </label>
             <label class="field" id="parallel-random-count-field">
               <span>Random count</span>
@@ -100,6 +117,22 @@
               <dd id="parallel-selected-total">0</dd>
             </div>
             <div>
+              <dt>Profile</dt>
+              <dd id="parallel-profile-summary">Stable Demo</dd>
+            </div>
+            <div>
+              <dt>ACS Peak</dt>
+              <dd id="parallel-acs-peak">-</dd>
+            </div>
+            <div>
+              <dt>Throughput</dt>
+              <dd id="parallel-throughput">-</dd>
+            </div>
+            <div>
+              <dt>P95 Duration</dt>
+              <dd id="parallel-p95-duration">-</dd>
+            </div>
+            <div>
               <dt>Message</dt>
               <dd id="parallel-message">Ready</dd>
             </div>
@@ -117,7 +150,7 @@
                   <th>Class</th>
                   <th>PaymentList</th>
                   <th>3DS Auto</th>
-                  <th>Duration</th>
+                  <th>Time</th>
                 </tr>
               </thead>
               <tbody id="parallel-results-body"></tbody>

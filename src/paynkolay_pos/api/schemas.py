@@ -423,7 +423,9 @@ class ParallelRunCreateRequest(BaseModel):
     """Browser request to start a parallel payment initialization run."""
 
     mode: Literal["manual", "random"]
+    execution_profile: Literal["stable", "load"] = "stable"
     concurrency: int = Field(default=10, ge=1, le=50)
+    acs_concurrency: int | None = Field(default=None, ge=1, le=50)
     amount: Decimal = Field(gt=Decimal("0"), max_digits=12, decimal_places=2)
     currency: Currency = Currency.TRY
     auto_complete_3ds: bool = False
@@ -453,7 +455,15 @@ class ParallelRunCreateRequest(BaseModel):
                 raise ValueError("random mode requires random_count")
             if self.manual_cards:
                 raise ValueError("random mode must not define manual_cards")
+        if self.execution_profile == "stable" and self.acs_concurrency is not None:
+            raise ValueError("stable profile manages acs_concurrency automatically")
         return self
+
+    @property
+    def effective_acs_concurrency(self) -> int:
+        """Return the scheduler ceiling selected for this run."""
+
+        return self.acs_concurrency or self.concurrency
 
 
 ParallelRunItemAutomationStatus = Literal[
@@ -463,6 +473,15 @@ ParallelRunItemAutomationStatus = Literal[
     "quarantined",
     "unknown",
 ]
+
+
+class ParallelRunStageTimings(BaseModel):
+    """Per-stage timings for one parallel payment item."""
+
+    initialization_ms: int | None = Field(default=None, ge=0)
+    acs_wait_ms: int | None = Field(default=None, ge=0)
+    acs_duration_ms: int | None = Field(default=None, ge=0)
+    payment_list_ms: int | None = Field(default=None, ge=0)
 
 
 class ParallelRunItemResponse(BaseModel):
@@ -488,7 +507,37 @@ class ParallelRunItemResponse(BaseModel):
     three_ds_automation: ThreeDSAutomationSummary | None = None
     error_message: str | None = None
     duration_ms: int | None = None
+    stage_timings: ParallelRunStageTimings = Field(default_factory=ParallelRunStageTimings)
     three_ds_url: str | None = None
+
+
+class AcsPoolMetrics(BaseModel):
+    """Observed adaptive capacity for one provider/card ACS lane."""
+
+    initial_limit: int = Field(ge=1)
+    final_limit: int = Field(ge=1)
+    maximum_limit: int = Field(ge=1)
+    peak_concurrency: int = Field(ge=0)
+
+
+class AcsSchedulerMetrics(BaseModel):
+    """Requested and observed browser automation concurrency."""
+
+    profile: Literal["stable", "load"]
+    requested_concurrency: int = Field(ge=1)
+    peak_concurrency: int = Field(ge=0)
+    pools: dict[str, AcsPoolMetrics] = Field(default_factory=dict)
+
+
+class ParallelRunMetrics(BaseModel):
+    """Aggregate performance metrics for a parallel run."""
+
+    elapsed_ms: int | None = Field(default=None, ge=0)
+    throughput_per_second: float | None = Field(default=None, ge=0)
+    p50_duration_ms: int | None = Field(default=None, ge=0)
+    p95_duration_ms: int | None = Field(default=None, ge=0)
+    peak_active_items: int = Field(default=0, ge=0)
+    classifications: dict[str, int] = Field(default_factory=dict)
 
 
 class ParallelRunResponse(BaseModel):
@@ -496,8 +545,10 @@ class ParallelRunResponse(BaseModel):
 
     run_id: str
     mode: Literal["manual", "random"]
+    execution_profile: Literal["stable", "load"]
     status: Literal["pending", "running", "completed", "completed_with_failures", "failed"]
     concurrency: int
+    acs_concurrency: int
     total: int
     completed: int
     failed: int
@@ -505,6 +556,8 @@ class ParallelRunResponse(BaseModel):
     finished_at: str | None = None
     evidence_path: str | None = None
     message: str
+    acs_scheduler: AcsSchedulerMetrics
+    metrics: ParallelRunMetrics
     items: list[ParallelRunItemResponse] = Field(default_factory=list)
 
 

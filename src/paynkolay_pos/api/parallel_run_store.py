@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import math
+from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
 from paynkolay_pos.api.schemas import (
+    AcsSchedulerMetrics,
     ParallelRunItemAutomationStatus,
     ParallelRunItemResponse,
+    ParallelRunMetrics,
     ParallelRunResponse,
+    ParallelRunStageTimings,
     PaymentListStatusSummary,
 )
 from paynkolay_pos.api.session_models import ProviderRequestSummary, ThreeDSAutomationSummary
@@ -44,6 +49,10 @@ class ParallelRunItemState:
     three_ds_automation: ThreeDSAutomationSummary | None = None
     error_message: str | None = None
     three_ds_url: str | None = None
+    initialization_ms: int | None = None
+    acs_wait_ms: int | None = None
+    acs_duration_ms: int | None = None
+    payment_list_ms: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -79,6 +88,12 @@ class ParallelRunItemState:
             three_ds_automation=self.three_ds_automation,
             error_message=self.error_message,
             duration_ms=self.duration_ms,
+            stage_timings=ParallelRunStageTimings(
+                initialization_ms=self.initialization_ms,
+                acs_wait_ms=self.acs_wait_ms,
+                acs_duration_ms=self.acs_duration_ms,
+                payment_list_ms=self.payment_list_ms,
+            ),
             three_ds_url=self.three_ds_url,
         )
 
@@ -89,13 +104,17 @@ class ParallelRunState:
 
     run_id: str
     mode: Literal["manual", "random"]
+    execution_profile: Literal["stable", "load"]
     concurrency: int
+    acs_concurrency: int
     items: list[ParallelRunItemState]
     status: ParallelRunStatus = "pending"
     started_at: datetime | None = None
     finished_at: datetime | None = None
     evidence_path: str | None = None
     message: str = "Parallel run is pending."
+    peak_active_items: int = 0
+    acs_scheduler: dict[str, object] = field(default_factory=dict)
 
     def response(self, *, include_items: bool = True) -> ParallelRunResponse:
         """Return a serialized run response."""
@@ -105,8 +124,10 @@ class ParallelRunState:
         return ParallelRunResponse(
             run_id=self.run_id,
             mode=self.mode,
+            execution_profile=self.execution_profile,
             status=self.status,
             concurrency=self.concurrency,
+            acs_concurrency=self.acs_concurrency,
             total=len(self.items),
             completed=completed,
             failed=failed,
@@ -114,7 +135,39 @@ class ParallelRunState:
             finished_at=_format_datetime(self.finished_at),
             evidence_path=self.evidence_path,
             message=self.message,
+            acs_scheduler=AcsSchedulerMetrics.model_validate(
+                self.acs_scheduler
+                or {
+                    "profile": self.execution_profile,
+                    "requested_concurrency": self.acs_concurrency,
+                    "peak_concurrency": 0,
+                    "pools": {},
+                }
+            ),
+            metrics=self._metrics(),
             items=[item.response() for item in self.items] if include_items else [],
+        )
+
+    def _metrics(self) -> ParallelRunMetrics:
+        durations = sorted(
+            duration
+            for item in self.items
+            if (duration := item.duration_ms) is not None
+        )
+        elapsed_ms = None
+        throughput = None
+        if self.started_at is not None:
+            end = self.finished_at or utc_now()
+            elapsed_ms = max(1, int((end - self.started_at).total_seconds() * 1000))
+            finished = sum(item.status in {"completed", "failed"} for item in self.items)
+            throughput = round(finished / (elapsed_ms / 1000), 3)
+        return ParallelRunMetrics(
+            elapsed_ms=elapsed_ms,
+            throughput_per_second=throughput,
+            p50_duration_ms=_percentile(durations, 0.50),
+            p95_duration_ms=_percentile(durations, 0.95),
+            peak_active_items=self.peak_active_items,
+            classifications=dict(Counter(item.classification for item in self.items)),
         )
 
 
@@ -170,3 +223,10 @@ def _format_datetime(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.isoformat()
+
+
+def _percentile(values: list[int], percentile: float) -> int | None:
+    if not values:
+        return None
+    index = max(0, math.ceil(len(values) * percentile) - 1)
+    return values[index]
