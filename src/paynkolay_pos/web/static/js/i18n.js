@@ -111,7 +111,22 @@
     document.querySelectorAll("[data-lang-button]").forEach((button) => { button.classList.toggle("active", button.dataset.langButton === currentLanguage); });
     window.dispatchEvent(new CustomEvent("paynkolay-language-change", { detail: currentLanguage }));
   }
-  window.PaynkolayI18n = { t: translate, apply: applyLanguage, get language() { return currentLanguage; } };
+  const turkishStatusLabels = {
+    completed: "Tamamlandı", captured: "Tahsil edildi", submitted: "Gönderildi", "not-submitted": "Gönderilmedi",
+    visible_page: "Sayfada görünen", "no-source": "Kaynak yok", otp_submitted: "OTP gönderildi",
+    otp_submitted_callback_not_reached: "OTP gönderildi, callback’e dönülmedi", created: "Oluşturuldu",
+    payment_list_missing: "PaymentList bulunamadı", awaiting_provider_finalization: "Sağlayıcı tamamlaması bekleniyor",
+    provider_failed: "Sağlayıcı hatası", blank_or_redirect_error: "Boş sayfa veya yönlendirme hatası",
+    failed: "Başarısız", running: "Çalışıyor", pending: "Bekliyor", pending_3ds: "3DS bekleniyor",
+    "Parallel run completed.": "Paralel test tamamlandı.",
+    "Parallel run completed with failures.": "Paralel test hatalarla tamamlandı.",
+    "provider payment status verification failed": "Sağlayıcı ödeme durumu doğrulanamadı"
+  };
+  function humanizeStatus(value) {
+    if (currentLanguage !== "tr" || !value) return value;
+    return turkishStatusLabels[value] || value;
+  }
+  window.PaynkolayI18n = { t: translate, apply: applyLanguage, humanizeStatus, get language() { return currentLanguage; } };
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll("[data-lang-button]").forEach((button) => button.addEventListener("click", () => applyLanguage(button.dataset.langButton)));
     applyLanguage(currentLanguage);

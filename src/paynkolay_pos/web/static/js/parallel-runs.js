@@ -23,6 +23,7 @@
   const parallelResultsBody = document.getElementById("parallel-results-body");
   let parallelRunPoll = null;
   let parallelSelections = [];
+  let lastParallelRun = null;
 
   function setParallelRunStatus(text, kind) {
     parallelRunStatus.textContent = text;
@@ -128,6 +129,7 @@
   }
 
   function renderParallelRun(run) {
+    lastParallelRun = run;
     parallelRunId.textContent = run.run_id;
     parallelProgress.textContent = `${run.completed + run.failed}/${run.total}`;
     parallelSuccessRate.textContent = formatSuccessRate(run.items || []);
@@ -135,7 +137,7 @@
     parallelAcsPeak.textContent = formatAcsPeak(run);
     parallelThroughput.textContent = formatThroughput(run.metrics);
     parallelP95Duration.textContent = formatDuration(run.metrics?.p95_duration_ms);
-    parallelMessage.textContent = run.message;
+    parallelMessage.textContent = window.PaynkolayI18n.humanizeStatus(run.message);
     parallelEvidencePath.textContent = run.evidence_path || "-";
     parallelRunButton.disabled = run.status === "running";
     if (run.status === "running") {
@@ -175,9 +177,9 @@
         row.className = parallelItemOutcomeClass(item);
         const values = [
           item.card_alias,
-          item.status,
-          item.classification,
-          item.payment_list_status || item.payment_list_error || "-",
+          window.PaynkolayI18n.humanizeStatus(item.status),
+          window.PaynkolayI18n.humanizeStatus(item.classification),
+          window.PaynkolayI18n.humanizeStatus(item.payment_list_status || item.payment_list_error || "-"),
           formatAutomationSummary(item.three_ds_automation),
           formatDuration(item.duration_ms),
         ];
@@ -222,13 +224,13 @@
     if (!automation) {
       return "-";
     }
-    const source = automation.otp_source_type || "no-source";
-    const submitted = automation.submitted ? "submitted" : "not-submitted";
+    const source = window.PaynkolayI18n.humanizeStatus(automation.otp_source_type || "no-source");
+    const submitted = window.PaynkolayI18n.humanizeStatus(automation.submitted ? "submitted" : "not-submitted");
     const details = [
-      automation.status,
+      window.PaynkolayI18n.humanizeStatus(automation.status),
       submitted,
       source,
-      automation.reason,
+      window.PaynkolayI18n.humanizeStatus(automation.reason),
     ].filter(Boolean);
     return details.join(" ");
   }
@@ -281,6 +283,10 @@
     parallelMessage.textContent = "Selection updated.";
     setParallelRunStatus("Idle", "neutral");
     renderParallelSelections();
+  });
+
+  window.addEventListener("paynkolay-language-change", () => {
+    if (lastParallelRun) renderParallelRun(lastParallelRun);
   });
 
   parallelRunButton.addEventListener("click", () => {
