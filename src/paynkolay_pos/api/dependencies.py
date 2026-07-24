@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from pathlib import Path
 from typing import Protocol, cast
 
 from fastapi import HTTPException, Request, status
+from playwright.async_api import Browser, Playwright, async_playwright
 from pydantic import SecretStr
 
 from paynkolay_pos.api.parallel_run_store import ParallelRunStore
@@ -56,6 +59,9 @@ class PlaywrightThreeDSAutomator:
         self._headed = headed
         self._close_delay_seconds = close_delay_seconds
         self._headed_fallback = headed_fallback
+        self._playwright: Playwright | None = None
+        self._browsers: dict[bool, Browser] = {}
+        self._browser_lock = asyncio.Lock()
 
     async def complete(
         self,
@@ -67,26 +73,67 @@ class PlaywrightThreeDSAutomator:
     ) -> AcsBrowserAutomationResult:
         """Complete a 3DS challenge using Chromium."""
 
-        result = await complete_acs_browser_challenge(
+        result = await self._complete(
+            html=html,
+            brand=brand,
+            configured_otp=configured_otp,
+            callback_url=callback_url,
+            headed=self._headed,
+        )
+        if self._should_retry_headed(result):
+            return await self._complete(
+                html=html,
+                brand=brand,
+                configured_otp=configured_otp,
+                callback_url=callback_url,
+                headed=True,
+            )
+        return result
+
+    async def _complete(
+        self,
+        *,
+        html: str,
+        brand: CardBrand,
+        configured_otp: SecretStr | None,
+        callback_url: str,
+        headed: bool,
+    ) -> AcsBrowserAutomationResult:
+        browser = await self._browser(headed=headed)
+        return await complete_acs_browser_challenge(
             html=html,
             brand=brand,
             configured_otp=configured_otp,
             callback_url=callback_url,
             form_base_url=self._form_base_url,
-            headed=self._headed,
+            headed=headed,
             close_delay_seconds=self._close_delay_seconds,
+            browser=browser,
         )
-        if self._should_retry_headed(result):
-            return await complete_acs_browser_challenge(
-                html=html,
-                brand=brand,
-                configured_otp=configured_otp,
-                callback_url=callback_url,
-                form_base_url=self._form_base_url,
-                headed=True,
-                close_delay_seconds=self._close_delay_seconds,
-            )
-        return result
+
+    async def _browser(self, *, headed: bool) -> Browser:
+        async with self._browser_lock:
+            browser = self._browsers.get(headed)
+            if browser is not None and browser.is_connected():
+                return browser
+            if self._playwright is None:
+                self._playwright = await async_playwright().start()
+            browser = await self._playwright.chromium.launch(headless=not headed)
+            self._browsers[headed] = browser
+            return browser
+
+    async def aclose(self) -> None:
+        """Close shared Chromium processes and the Playwright driver."""
+
+        async with self._browser_lock:
+            for browser in self._browsers.values():
+                with suppress(Exception):
+                    await browser.close()
+            self._browsers.clear()
+            if self._playwright is not None:
+                with suppress(Exception):
+                    await self._playwright.stop()
+                self._playwright = None
 
     def _should_retry_headed(self, result: AcsBrowserAutomationResult) -> bool:
         """Retry in headed mode only when headless could not find a dynamic OTP source."""
@@ -154,8 +201,8 @@ def get_parallel_run_store(request: Request) -> ParallelRunStore:
     return cast(ParallelRunStore, request.app.state.parallel_run_store)
 
 
-def get_three_ds_automator() -> SupportsThreeDSAutomator:
-    """Return the configured 3DS browser automator."""
+def create_three_ds_automator() -> PlaywrightThreeDSAutomator:
+    """Create the app-scoped 3DS browser automator."""
 
     return PlaywrightThreeDSAutomator(
         form_base_url=os.getenv(
@@ -166,6 +213,12 @@ def get_three_ds_automator() -> SupportsThreeDSAutomator:
         close_delay_seconds=_env_float("PAYNKOLAY_3DS_AUTOMATION_CLOSE_DELAY", default=0.0),
         headed_fallback=_env_flag("PAYNKOLAY_3DS_AUTOMATION_HEADED_FALLBACK", default=True),
     )
+
+
+def get_three_ds_automator(request: Request) -> SupportsThreeDSAutomator:
+    """Return the app-scoped 3DS browser automator."""
+
+    return cast(SupportsThreeDSAutomator, request.app.state.three_ds_automator)
 
 
 def _env_flag(name: str, *, default: bool) -> bool:

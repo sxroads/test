@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from paynkolay_pos.api.dependencies import static_dir, templates_dir
+from paynkolay_pos.api.dependencies import (
+    PlaywrightThreeDSAutomator,
+    create_three_ds_automator,
+    static_dir,
+    templates_dir,
+)
 from paynkolay_pos.api.parallel_run_store import ParallelRunStore
 from paynkolay_pos.api.routes import (
     callbacks,
@@ -28,15 +36,23 @@ from paynkolay_pos.api.three_ds_store import ThreeDSFormStore
 def create_app() -> FastAPI:
     """Create and configure the FastAPI web application."""
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        yield
+        automator: PlaywrightThreeDSAutomator = app.state.three_ds_automator
+        await automator.aclose()
+
     app = FastAPI(
         title="Paynkolay Sanal POS Web",
         version="0.1.0",
         description="Browser UI and API surface for Paynkolay Sanal POS testing.",
+        lifespan=lifespan,
     )
     app.state.payment_session_store = PaymentSessionStore()
     app.state.three_ds_form_store = ThreeDSFormStore()
     app.state.parallel_run_store = ParallelRunStore()
     app.state.credential_report_run = reports.ReportCommandRunState()
+    app.state.three_ds_automator = create_three_ds_automator()
     app.mount("/static", StaticFiles(directory=static_dir()), name="static")
 
     templates = Jinja2Templates(directory=templates_dir())

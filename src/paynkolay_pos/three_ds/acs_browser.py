@@ -182,16 +182,20 @@ async def complete_acs_browser_challenge(
     form_base_url: str = DEFAULT_FORM_BASE_URL,
     headed: bool = False,
     close_delay_seconds: float = 0.0,
+    browser: Browser | None = None,
 ) -> AcsBrowserAutomationResult:
     """Complete a 3DS ACS challenge when a safe OTP source can be resolved."""
 
     document = render_three_ds_form(html)
-    async with async_playwright() as playwright:
-        browser: Browser | None = None
-        context: BrowserContext | None = None
-        try:
+    playwright = None
+    owns_browser = browser is None
+    context: BrowserContext | None = None
+    try:
+        if browser is None:
+            playwright = await async_playwright().start()
             browser = await playwright.chromium.launch(headless=not headed)
-            context = await _new_browser_context(browser=browser, headed=headed)
+        context = await _new_browser_context(browser=browser, headed=headed)
+        try:
             page = await context.new_page()
             await _set_initial_content(page, document.html, form_base_url=form_base_url)
             if not _has_auto_submit(document.html):
@@ -304,28 +308,30 @@ async def complete_acs_browser_challenge(
                 submit_selector=submit_target.selector,
                 otp_resolution=action.otp_resolution,
             )
-        except PlaywrightError as exc:
-            return AcsBrowserAutomationResult(
-                completed=False,
-                submitted=False,
-                reason=f"playwright_error: {exc}"[:500],
-                final_url=None,
-                title=None,
-                otp_resolution=None,
-                frames=(),
-            )
-        except (TypeError, ValueError) as exc:
-            return AcsBrowserAutomationResult(
-                completed=False,
-                submitted=False,
-                reason=f"framework_error: {exc}"[:500],
-                frames=(),
-            )
         finally:
-            if context is not None:
-                await context.close()
-            if browser is not None:
-                await browser.close()
+            await context.close()
+    except PlaywrightError as exc:
+        return AcsBrowserAutomationResult(
+            completed=False,
+            submitted=False,
+            reason=f"playwright_error: {exc}"[:500],
+            final_url=None,
+            title=None,
+            otp_resolution=None,
+            frames=(),
+        )
+    except (TypeError, ValueError) as exc:
+        return AcsBrowserAutomationResult(
+            completed=False,
+            submitted=False,
+            reason=f"framework_error: {exc}"[:500],
+            frames=(),
+        )
+    finally:
+        if owns_browser and browser is not None:
+            await browser.close()
+        if playwright is not None:
+            await playwright.stop()
 
 
 def _result(

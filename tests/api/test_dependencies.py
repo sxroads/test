@@ -167,3 +167,20 @@ async def test_playwright_automator_does_not_retry_other_failures(
 
     assert result.submitted is False
     assert calls == [False]
+
+
+async def test_playwright_automator_reuses_shared_browser() -> None:
+    automator = PlaywrightThreeDSAutomator(
+        form_base_url="https://acs.example.test/",
+        headed=False,
+        close_delay_seconds=0.0,
+        headed_fallback=False,
+    )
+    try:
+        first = await automator._browser(headed=False)
+        second = await automator._browser(headed=False)
+
+        assert first is second
+        assert first.is_connected()
+    finally:
+        await automator.aclose()
