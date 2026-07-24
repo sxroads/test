@@ -83,6 +83,7 @@ def test_parallel_run_request_payload_uses_random_mode() -> None:
         "amount": "22.00",
         "currency": "TRY",
         "concurrency": 10,
+        "execution_profile": "stable",
         "auto_complete_3ds": True,
         "random_count": 10,
     }
@@ -104,9 +105,27 @@ def test_parallel_run_request_payload_uses_manual_cards() -> None:
         "amount": "22.00",
         "currency": "TRY",
         "concurrency": 2,
+        "execution_profile": "stable",
         "auto_complete_3ds": True,
         "manual_cards": selected_cards,
     }
+
+
+def test_parallel_run_request_payload_uses_load_profile_acs_concurrency() -> None:
+    selected_cards = [{"alias": "nkolay_dynamic_otp_visa_6111", "repeat_count": 8}]
+
+    payload = UAT_PARALLEL_3DS_SMOKE._parallel_run_request_payload(
+        random_mode=False,
+        amount="22.00",
+        concurrency=10,
+        execution_profile="load",
+        acs_concurrency=8,
+        count=8,
+        selected_cards=selected_cards,
+    )
+
+    assert payload["execution_profile"] == "load"
+    assert payload["acs_concurrency"] == 8
 
 
 def test_progress_summaries_include_card_alias_and_automation_status_counts() -> None:

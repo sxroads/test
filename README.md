@@ -68,6 +68,13 @@ Parallel testing is intended for confidence runs and UAT regression checks. The 
 manual card selection and random selection from cards that are marked safe for automatic
 success testing.
 
+Two execution profiles separate a reliable demo from an intentional capacity test:
+
+- `Stable Demo` reuses one Chromium process, isolates every challenge in its own browser
+  context, and adapts ACS concurrency per card/provider lane.
+- `Load Test` applies the requested ACS concurrency directly so provider limits remain visible
+  in the result instead of being hidden by automatic backpressure.
+
 Current practical baseline:
 
 - `nkolay_dynamic_otp_visa_6111` is the primary baseline card.
@@ -78,7 +85,15 @@ Current practical baseline:
   runs unless their behavior is explicitly promoted.
 
 Each parallel item records its own result, so one provider or ACS failure does not hide the
-outcome of the rest of the batch.
+outcome of the rest of the batch. Run evidence also includes actual peak ACS concurrency,
+throughput, P50/P95 duration, and initialization/ACS/PaymentList stage timings.
+
+The guarded CLI exposes the same profiles:
+
+```bash
+make uat-parallel-3ds-smoke UAT_PARALLEL_3DS_ARGS="--profile stable"
+make uat-parallel-3ds-smoke UAT_PARALLEL_3DS_ARGS="--profile load --acs-concurrency 20"
+```
 
 ## Result Language
 

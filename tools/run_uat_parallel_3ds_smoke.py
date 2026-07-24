@@ -64,6 +64,18 @@ def main() -> None:
         help="Parallel run concurrency. Max 50.",
     )
     parser.add_argument(
+        "--profile",
+        choices=("stable", "load"),
+        default="stable",
+        help="Stable adaptive scheduling or direct load-test concurrency.",
+    )
+    parser.add_argument(
+        "--acs-concurrency",
+        type=int,
+        default=None,
+        help="ACS browser concurrency for --profile load. Defaults to --concurrency.",
+    )
+    parser.add_argument(
         "--amount",
         default="100.00",
         help="Payment amount used for every item.",
@@ -101,12 +113,18 @@ def main() -> None:
         raise SystemExit("total item count must be between 1 and 50.")
     if args.concurrency < 1 or args.concurrency > 50:
         raise SystemExit("--concurrency must be between 1 and 50.")
+    if args.acs_concurrency is not None and args.profile != "load":
+        raise SystemExit("--acs-concurrency requires --profile load.")
+    if args.acs_concurrency is not None and not 1 <= args.acs_concurrency <= 50:
+        raise SystemExit("--acs-concurrency must be between 1 and 50.")
 
     asyncio.run(
         _run_parallel_smoke(
             requested_card_alias=args.card_alias,
             count=total_count,
             concurrency=args.concurrency,
+            execution_profile=args.profile,
+            acs_concurrency=args.acs_concurrency,
             amount=args.amount,
             poll_interval=args.poll_interval,
             timeout=args.timeout,
@@ -122,6 +140,8 @@ async def _run_parallel_smoke(
     requested_card_alias: str,
     count: int,
     concurrency: int,
+    execution_profile: str,
+    acs_concurrency: int | None,
     amount: str,
     poll_interval: float,
     timeout: float,
@@ -159,6 +179,8 @@ async def _run_parallel_smoke(
                 "selected_cards": selected_cards,
                 "count": count,
                 "concurrency": concurrency,
+                "execution_profile": execution_profile,
+                "acs_concurrency": acs_concurrency,
                 "amount": amount,
                 "auto_complete_3ds": True,
                 "mode": "random" if random_mode else "manual",
@@ -179,6 +201,8 @@ async def _run_parallel_smoke(
                 random_mode=random_mode,
                 amount=amount,
                 concurrency=concurrency,
+                execution_profile=execution_profile,
+                acs_concurrency=acs_concurrency,
                 count=count,
                 selected_cards=selected_cards,
             ),
@@ -227,6 +251,8 @@ def _parallel_run_request_payload(
     random_mode: bool,
     amount: str,
     concurrency: int,
+    execution_profile: str = "stable",
+    acs_concurrency: int | None = None,
     count: int,
     selected_cards: list[ManualCardSelection],
 ) -> dict[str, Any]:
@@ -235,8 +261,11 @@ def _parallel_run_request_payload(
         "amount": amount,
         "currency": "TRY",
         "concurrency": concurrency,
+        "execution_profile": execution_profile,
         "auto_complete_3ds": True,
     }
+    if execution_profile == "load":
+        payload["acs_concurrency"] = acs_concurrency or concurrency
     if random_mode:
         payload["random_count"] = count
     else:
