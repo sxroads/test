@@ -2,7 +2,6 @@
   const parallelRunStatus = document.getElementById("parallel-run-status");
   const parallelMode = document.getElementById("parallel-mode");
   const parallelAmount = document.getElementById("parallel-amount");
-  const parallelConcurrency = document.getElementById("parallel-concurrency");
   const parallelRandomCountField = document.getElementById("parallel-random-count-field");
   const parallelRandomCount = document.getElementById("parallel-random-count");
   const parallelManualPanel = document.getElementById("parallel-manual-panel");
@@ -116,7 +115,7 @@
       mode,
       amount: parallelAmount.value,
       currency: "TRY",
-      concurrency: Number(parallelConcurrency.value),
+      concurrency: 10,
       execution_profile: "stable",
       auto_complete_3ds: true,
     };

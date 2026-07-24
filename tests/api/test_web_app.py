@@ -378,7 +378,7 @@ async def test_parallel_page_renders_parallel_run_screen(client: httpx.AsyncClie
     assert 'id="parallel-results-body"' in response.text
     assert 'id="parallel-evidence-path"' in response.text
     assert 'id="parallel-success-rate"' in response.text
-    assert 'id="parallel-concurrency" type="number" min="1" max="150"' in response.text
+    assert 'id="parallel-concurrency"' not in response.text
     assert 'name="parallel-profile"' not in response.text
     assert 'id="parallel-acs-concurrency"' not in response.text
     assert 'id="parallel-acs-peak"' in response.text
