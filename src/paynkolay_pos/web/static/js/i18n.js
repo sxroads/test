@@ -51,7 +51,7 @@
   };
 
   Object.assign(translations.en, {
-    config: "Config", expiry: "Expiry", save_card: "Save card", cards_not_loaded: "Cards are not loaded.",
+    config: "Config", expiry: "Expiry", save_card: "Save card", cards_not_loaded: "Cards are not loaded.", amount: "Amount",
     three_ds_completion: "3DS Completion", request_flow: "Request flow", class_name: "Class", three_ds_auto: "3DS Auto",
     lookup_payment: "Lookup payment", ready: "Ready", configured: "Configured", local: "Local", error: "Error",
     running: "Running", completed: "Completed", attention: "Attention", failed: "Failed", add_card: "Add card",
@@ -61,7 +61,7 @@
     loading_evidence: "Loading evidence", view: "View"
   });
   Object.assign(translations.tr, {
-    config: "Yapılandırma", expiry: "Son kullanma", save_card: "Kartı kaydet", cards_not_loaded: "Kartlar yüklenemedi.",
+    config: "Yapılandırma", expiry: "Son kullanma", save_card: "Kartı kaydet", cards_not_loaded: "Kartlar yüklenemedi.", amount: "Tutar",
     three_ds_completion: "3DS Tamamlama", request_flow: "İstek akışı", class_name: "Sınıf", three_ds_auto: "3DS Otomasyonu",
     lookup_payment: "Ödemeyi sorgula", ready: "Hazır", configured: "Yapılandırıldı", local: "Yerel", error: "Hata",
     running: "Çalışıyor", completed: "Tamamlandı", attention: "Dikkat", failed: "Başarısız", add_card: "Kart ekle",
