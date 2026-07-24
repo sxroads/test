@@ -378,14 +378,14 @@ async def test_parallel_page_renders_parallel_run_screen(client: httpx.AsyncClie
     assert 'id="parallel-results-body"' in response.text
     assert 'id="parallel-evidence-path"' in response.text
     assert 'id="parallel-success-rate"' in response.text
-    assert 'id="parallel-concurrency" type="number" min="1" max="50"' in response.text
+    assert 'id="parallel-concurrency" type="number" min="1" max="150"' in response.text
     assert 'name="parallel-profile" value="stable" checked' in response.text
     assert 'name="parallel-profile" value="load"' in response.text
     assert 'id="parallel-acs-concurrency"' in response.text
     assert 'id="parallel-acs-peak"' in response.text
     assert 'id="parallel-throughput"' in response.text
-    assert 'id="parallel-random-count" type="number" min="1" max="50"' in response.text
-    assert 'id="parallel-repeat-count" type="number" min="1" max="50"' in response.text
+    assert 'id="parallel-random-count" type="number" min="1" max="150"' in response.text
+    assert 'id="parallel-repeat-count" type="number" min="1" max="150"' in response.text
     assert "Parallel 3D Secure runs complete automatically" in response.text
     assert "/static/js/parallel-runs.js?v=adaptive-acs-profiles" in response.text
 
@@ -1985,14 +1985,14 @@ async def test_parallel_run_validation_limits_manual_items(client: httpx.AsyncCl
             "amount": "100.00",
             "currency": "TRY",
             "manual_cards": [
-                {"alias": "a", "repeat_count": 26},
-                {"alias": "b", "repeat_count": 25},
+                {"alias": "a", "repeat_count": 76},
+                {"alias": "b", "repeat_count": 75},
             ],
         },
     )
 
     assert response.status_code == 422
-    assert "manual mode can create at most 50 test items" in response.text
+    assert "manual mode can create at most 150 test items" in response.text
 
 
 @pytest.mark.api

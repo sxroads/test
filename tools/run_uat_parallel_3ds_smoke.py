@@ -55,13 +55,13 @@ def main() -> None:
         "--count",
         type=int,
         default=10,
-        help="Number of repeated attempts for the selected card. Max 50.",
+        help="Number of repeated attempts for the selected card. Max 150.",
     )
     parser.add_argument(
         "--concurrency",
         type=int,
         default=10,
-        help="Parallel run concurrency. Max 50.",
+        help="Parallel run concurrency. Max 150.",
     )
     parser.add_argument(
         "--profile",
@@ -109,14 +109,14 @@ def main() -> None:
         raise SystemExit("--random cannot be combined with --manual-card.")
     if os.getenv("PAYNKOLAY_ENABLE_LIVE_E2E") != "1":
         raise SystemExit("Set PAYNKOLAY_ENABLE_LIVE_E2E=1 before real UAT calls.")
-    if total_count < 1 or total_count > 50:
-        raise SystemExit("total item count must be between 1 and 50.")
-    if args.concurrency < 1 or args.concurrency > 50:
-        raise SystemExit("--concurrency must be between 1 and 50.")
+    if total_count < 1 or total_count > 150:
+        raise SystemExit("total item count must be between 1 and 150.")
+    if args.concurrency < 1 or args.concurrency > 150:
+        raise SystemExit("--concurrency must be between 1 and 150.")
     if args.acs_concurrency is not None and args.profile != "load":
         raise SystemExit("--acs-concurrency requires --profile load.")
-    if args.acs_concurrency is not None and not 1 <= args.acs_concurrency <= 50:
-        raise SystemExit("--acs-concurrency must be between 1 and 50.")
+    if args.acs_concurrency is not None and not 1 <= args.acs_concurrency <= 150:
+        raise SystemExit("--acs-concurrency must be between 1 and 150.")
 
     asyncio.run(
         _run_parallel_smoke(
@@ -376,8 +376,8 @@ def _parse_manual_cards(values: Sequence[str]) -> list[ManualCardSelection]:
             repeat_count = int(count_value)
         except ValueError as exc:
             raise SystemExit("--manual-card COUNT must be an integer.") from exc
-        if repeat_count < 1 or repeat_count > 50:
-            raise SystemExit("--manual-card COUNT must be between 1 and 50.")
+        if repeat_count < 1 or repeat_count > 150:
+            raise SystemExit("--manual-card COUNT must be between 1 and 150.")
         selections.append({"alias": alias.strip(), "repeat_count": repeat_count})
     return selections
 

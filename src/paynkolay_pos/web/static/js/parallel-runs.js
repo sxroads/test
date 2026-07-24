@@ -297,8 +297,8 @@
       (sum, selection) => sum + selection.repeat_count,
       0,
     );
-    if (currentTotal + repeatCount > 50) {
-      parallelMessage.textContent = "Manual selection can include at most 50 test items.";
+    if (currentTotal + repeatCount > 150) {
+      parallelMessage.textContent = "Manual selection can include at most 150 test items.";
       setParallelRunStatus("Limit", "error");
       return;
     }
