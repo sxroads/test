@@ -34,19 +34,6 @@
             <h2 data-i18n="parallel_test">Parallel Test</h2>
             <span class="status-pill neutral" id="parallel-run-status">Idle</span>
           </div>
-          <fieldset class="field parallel-profile-field">
-            <legend data-i18n="execution_profile">Execution profile</legend>
-            <div class="segmented-control">
-              <label>
-                <input type="radio" name="parallel-profile" value="stable" checked>
-                <span data-i18n="stable_demo">Stable Demo</span>
-              </label>
-              <label>
-                <input type="radio" name="parallel-profile" value="load">
-                <span data-i18n="load_test">Load Test</span>
-              </label>
-            </div>
-          </fieldset>
           <div class="card-add-form parallel-controls">
             <label class="field">
               <span data-i18n="mode">Mode</span>
@@ -62,10 +49,6 @@
             <label class="field">
               <span data-i18n="concurrency">Concurrency</span>
               <input id="parallel-concurrency" type="number" min="1" max="150" value="10">
-            </label>
-            <label class="field hidden" id="parallel-acs-concurrency-field">
-              <span data-i18n="acs_cap">ACS concurrency cap</span>
-              <input id="parallel-acs-concurrency" type="number" min="1" max="150" value="10">
             </label>
             <label class="field" id="parallel-random-count-field">
               <span data-i18n="random_count">Random count</span>
@@ -123,7 +106,7 @@
             </div>
             <div>
               <dt data-i18n="execution_profile">Profile</dt>
-              <dd id="parallel-profile-summary">Stable Demo</dd>
+              <dd id="parallel-profile-summary" data-i18n="stable_demo">Stable Demo</dd>
             </div>
             <div>
               <dt data-i18n="acs_peak">ACS Peak</dt>

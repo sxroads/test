@@ -3,11 +3,6 @@
   const parallelMode = document.getElementById("parallel-mode");
   const parallelAmount = document.getElementById("parallel-amount");
   const parallelConcurrency = document.getElementById("parallel-concurrency");
-  const parallelProfiles = document.querySelectorAll('input[name="parallel-profile"]');
-  const parallelAcsConcurrencyField = document.getElementById(
-    "parallel-acs-concurrency-field",
-  );
-  const parallelAcsConcurrency = document.getElementById("parallel-acs-concurrency");
   const parallelRandomCountField = document.getElementById("parallel-random-count-field");
   const parallelRandomCount = document.getElementById("parallel-random-count");
   const parallelManualPanel = document.getElementById("parallel-manual-panel");
@@ -50,16 +45,6 @@
     parallelRandomCountField.classList.toggle("hidden", !randomMode);
     parallelManualPanel.classList.toggle("hidden", randomMode);
     renderParallelSelections();
-  }
-
-  function selectedExecutionProfile() {
-    return document.querySelector('input[name="parallel-profile"]:checked').value;
-  }
-
-  function renderExecutionProfile() {
-    const loadProfile = selectedExecutionProfile() === "load";
-    parallelAcsConcurrencyField.classList.toggle("hidden", !loadProfile);
-    parallelProfileSummary.textContent = loadProfile ? "Load Test" : "Stable Demo";
   }
 
   function renderParallelSelections() {
@@ -132,12 +117,9 @@
       amount: parallelAmount.value,
       currency: "TRY",
       concurrency: Number(parallelConcurrency.value),
-      execution_profile: selectedExecutionProfile(),
+      execution_profile: "stable",
       auto_complete_3ds: true,
     };
-    if (payload.execution_profile === "load") {
-      payload.acs_concurrency = Number(parallelAcsConcurrency.value);
-    }
     if (mode === "random") {
       payload.random_count = Number(parallelRandomCount.value);
       return payload;
@@ -150,8 +132,7 @@
     parallelRunId.textContent = run.run_id;
     parallelProgress.textContent = `${run.completed + run.failed}/${run.total}`;
     parallelSuccessRate.textContent = formatSuccessRate(run.items || []);
-    parallelProfileSummary.textContent =
-      run.execution_profile === "load" ? "Load Test" : "Stable Demo";
+    parallelProfileSummary.textContent = window.PaynkolayI18n.t("stable_demo");
     parallelAcsPeak.textContent = formatAcsPeak(run);
     parallelThroughput.textContent = formatThroughput(run.metrics);
     parallelP95Duration.textContent = formatDuration(run.metrics?.p95_duration_ms);
@@ -278,14 +259,6 @@
   }
 
   parallelMode.addEventListener("change", renderParallelMode);
-  for (const profile of parallelProfiles) {
-    profile.addEventListener("change", renderExecutionProfile);
-  }
-  parallelConcurrency.addEventListener("input", () => {
-    if (selectedExecutionProfile() === "load") {
-      parallelAcsConcurrency.value = parallelConcurrency.value;
-    }
-  });
   parallelRandomCount.addEventListener("input", renderParallelSelections);
 
   parallelAddCard.addEventListener("click", () => {
@@ -325,7 +298,6 @@
   });
 
   renderParallelMode();
-  renderExecutionProfile();
   renderParallelSelections();
   loadParallelCards();
 })();
