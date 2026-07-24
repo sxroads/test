@@ -6,6 +6,7 @@
     <title>Parallel Tests</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/i18n.js" defer></script>
     <script src="/static/js/api-client.js" defer></script>
     <script src="/static/js/parallel-runs.js?v=adaptive-acs-profiles" defer></script>
   </head>
@@ -13,41 +14,45 @@
     <div class="shell">
       <header class="topbar">
         <div>
-          <h1>Parallel Tests</h1>
+          <h1 data-i18n="parallel_tests">Parallel Tests</h1>
           <p>Paynkolay POS</p>
         </div>
-        <nav aria-label="Primary">
-          <a class="nav-link" href="/">Payment</a>
-          <a class="nav-link active" href="/parallel">Parallel</a>
-          <a class="nav-link" href="/settings">Settings</a>
-          <a class="nav-link" href="/reports">Reports</a>
+        <nav aria-label="Primary navigation">
+          <a class="nav-link" href="/" data-i18n="payment">Payment</a>
+          <a class="nav-link active" href="/parallel" data-i18n="parallel">Parallel</a>
+          <a class="nav-link" href="/settings" data-i18n="settings">Settings</a>
+          <a class="nav-link" href="/reports" data-i18n="reports">Reports</a>
+          <div class="language-switcher" aria-label="Language">
+            <button type="button" data-lang-button="en">EN</button>
+            <button type="button" data-lang-button="tr">TR</button>
+          </div>
         </nav>
       </header>
       <main class="workspace single parallel-workspace">
         <section class="panel report-command-panel parallel-panel">
           <div class="panel-heading">
-            <h2>Parallel Test</h2>
+            <h2 data-i18n="parallel_test">Parallel Test</h2>
             <span class="status-pill neutral" id="parallel-run-status">Idle</span>
           </div>
           <fieldset class="field parallel-profile-field">
-            <legend>Execution profile</legend>
+            <legend data-i18n="execution_profile">Execution profile</legend>
             <div class="segmented-control">
               <label>
                 <input type="radio" name="parallel-profile" value="stable" checked>
-                <span>Stable Demo</span>
+                <span data-i18n="stable_demo">Stable Demo</span>
               </label>
               <label>
                 <input type="radio" name="parallel-profile" value="load">
-                <span>Load Test</span>
+                <span data-i18n="load_test">Load Test</span>
               </label>
             </div>
           </fieldset>
           <div class="card-add-form parallel-controls">
             <label class="field">
-              <span>Mode</span>
+              <span data-i18n="mode">Mode</span>
               <select id="parallel-mode">
-                <option value="manual">Manual selection</option>
-                <option value="random">Random real cards</option>
+                <option value="manual" data-i18n="manual_selection">Manual selection</option>
+                <option value="random" data-i18n="random_cards">Random real cards</option>
               </select>
             </label>
             <label class="field">
@@ -55,39 +60,39 @@
               <input id="parallel-amount" type="number" min="1" step="0.01" value="100">
             </label>
             <label class="field">
-              <span>Concurrency</span>
+              <span data-i18n="concurrency">Concurrency</span>
               <input id="parallel-concurrency" type="number" min="1" max="150" value="10">
             </label>
             <label class="field hidden" id="parallel-acs-concurrency-field">
-              <span>ACS concurrency cap</span>
+              <span data-i18n="acs_cap">ACS concurrency cap</span>
               <input id="parallel-acs-concurrency" type="number" min="1" max="150" value="10">
             </label>
             <label class="field" id="parallel-random-count-field">
-              <span>Random count</span>
+              <span data-i18n="random_count">Random count</span>
               <input id="parallel-random-count" type="number" min="1" max="150" value="10">
             </label>
           </div>
           <div id="parallel-manual-panel">
             <div class="card-add-form parallel-manual-controls">
               <label class="field">
-                <span>Card</span>
+                <span data-i18n="card">Card</span>
                 <select id="parallel-card-select"></select>
               </label>
               <label class="field">
-                <span>Repeat</span>
+                <span data-i18n="repeat">Repeat</span>
                 <input id="parallel-repeat-count" type="number" min="1" max="150" value="1">
               </label>
               <div class="result-actions">
-                <button class="secondary-action" id="parallel-add-card" type="button">Add card</button>
+                <button class="secondary-action" id="parallel-add-card" type="button" data-i18n="add">Add</button>
               </div>
             </div>
             <div class="table-wrap parallel-selection-wrap">
               <table class="data-table parallel-selection-table">
                 <thead>
                   <tr>
-                    <th>Card</th>
-                    <th>Repeat</th>
-                    <th>Action</th>
+                    <th data-i18n="card">Card</th>
+                    <th data-i18n="repeat">Repeat</th>
+                    <th data-i18n="action">Action</th>
                   </tr>
                 </thead>
                 <tbody id="parallel-selection-body"></tbody>
@@ -96,7 +101,7 @@
           </div>
           <div class="result-actions">
             <button class="secondary-action" id="parallel-run-button" type="button">
-              Start parallel run
+              <span data-i18n="start_parallel">Start parallel run</span>
             </button>
           </div>
           <dl class="result-list parallel-summary-list">
@@ -105,39 +110,39 @@
               <dd id="parallel-run-id">-</dd>
             </div>
             <div>
-              <dt>Progress</dt>
+              <dt data-i18n="progress">Progress</dt>
               <dd id="parallel-progress">-</dd>
             </div>
             <div>
-              <dt>Success Rate</dt>
+              <dt data-i18n="success_rate">Success Rate</dt>
               <dd id="parallel-success-rate">-</dd>
             </div>
             <div>
-              <dt>Selected Tests</dt>
+              <dt data-i18n="selected_tests">Selected Tests</dt>
               <dd id="parallel-selected-total">0</dd>
             </div>
             <div>
-              <dt>Profile</dt>
+              <dt data-i18n="execution_profile">Profile</dt>
               <dd id="parallel-profile-summary">Stable Demo</dd>
             </div>
             <div>
-              <dt>ACS Peak</dt>
+              <dt data-i18n="acs_peak">ACS Peak</dt>
               <dd id="parallel-acs-peak">-</dd>
             </div>
             <div>
-              <dt>Throughput</dt>
+              <dt data-i18n="throughput">Throughput</dt>
               <dd id="parallel-throughput">-</dd>
             </div>
             <div>
-              <dt>P95 Duration</dt>
+              <dt data-i18n="p95">P95 Duration</dt>
               <dd id="parallel-p95-duration">-</dd>
             </div>
             <div>
-              <dt>Message</dt>
+              <dt data-i18n="message">Message</dt>
               <dd id="parallel-message">Ready</dd>
             </div>
             <div>
-              <dt>Evidence</dt>
+              <dt data-i18n="evidence">Evidence</dt>
               <dd id="parallel-evidence-path">-</dd>
             </div>
           </dl>
@@ -145,19 +150,19 @@
             <table class="data-table parallel-results-table">
               <thead>
                 <tr>
-                  <th>Card</th>
-                  <th>Status</th>
+                  <th data-i18n="card">Card</th>
+                  <th data-i18n="status">Status</th>
                   <th>Class</th>
-                  <th>PaymentList</th>
-                  <th>3DS Auto</th>
-                  <th>Time</th>
+                  <th data-i18n="payment_list">PaymentList</th>
+                  <th data-i18n="three_ds_auto">3DS Auto</th>
+                  <th data-i18n="time">Time</th>
                 </tr>
               </thead>
               <tbody id="parallel-results-body"></tbody>
             </table>
           </div>
           <p class="inline-message">
-            Parallel 3D Secure runs complete automatically and record sanitized ACS automation evidence.
+            <span data-i18n="parallel_note">Parallel 3D Secure runs complete automatically and record sanitized ACS automation evidence.</span>
           </p>
         </section>
       </main>

@@ -6,6 +6,7 @@
     <title>Paynkolay POS</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/i18n.js" defer></script>
     <script src="/static/js/api-client.js" defer></script>
     <script src="/static/js/payment-form.js?v=headless-acs-1" defer></script>
   </head>
@@ -14,32 +15,36 @@
       <header class="topbar">
         <div>
           <h1>Paynkolay POS</h1>
-          <p id="environment-label">Environment pending</p>
+          <p id="environment-label" data-i18n="environment_pending">Environment pending</p>
         </div>
-        <nav aria-label="Primary">
-          <a class="nav-link active" href="/">Payment</a>
-          <a class="nav-link" href="/parallel">Parallel</a>
-          <a class="nav-link" href="/settings">Settings</a>
-          <a class="nav-link" href="/reports">Reports</a>
+        <nav aria-label="Primary navigation">
+          <a class="nav-link active" href="/" data-i18n="payment">Payment</a>
+          <a class="nav-link" href="/parallel" data-i18n="parallel">Parallel</a>
+          <a class="nav-link" href="/settings" data-i18n="settings">Settings</a>
+          <a class="nav-link" href="/reports" data-i18n="reports">Reports</a>
+          <div class="language-switcher" aria-label="Language">
+            <button type="button" data-lang-button="en">EN</button>
+            <button type="button" data-lang-button="tr">TR</button>
+          </div>
         </nav>
       </header>
 
       <main class="workspace">
         <section class="panel payment-panel" aria-labelledby="payment-title">
           <div class="panel-heading">
-            <h2 id="payment-title">Payment</h2>
+            <h2 id="payment-title" data-i18n="payment">Payment</h2>
             <div class="heading-actions">
-              <button id="card-list-button" class="secondary-action" type="button">List</button>
+              <button id="card-list-button" class="secondary-action" type="button" data-i18n="list">List</button>
               <span class="status-pill" id="config-status">Config</span>
             </div>
           </div>
 
           <section id="card-list-panel" class="card-list-panel hidden" aria-labelledby="card-list-title">
             <div class="panel-heading panel-heading-compact">
-              <h3 id="card-list-title">Test Cards</h3>
+              <h3 id="card-list-title" data-i18n="test_cards">Test Cards</h3>
               <div class="heading-actions">
-                <button id="card-add-toggle" class="secondary-action icon-action" type="button" aria-label="Add card">+</button>
-                <button id="card-list-close" class="secondary-action" type="button">Close</button>
+                <button id="card-add-toggle" class="secondary-action icon-action" type="button" data-i18n-aria-label="add_card">+</button>
+                <button id="card-list-close" class="secondary-action" type="button" data-i18n="close">Close</button>
               </div>
             </div>
             <form id="card-add-form" class="card-add-form hidden" autocomplete="off">

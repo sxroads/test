@@ -64,6 +64,36 @@ select {
   gap: 8px;
 }
 
+.language-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.language-switcher button {
+  min-width: 32px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.language-switcher button.active {
+  background: var(--text);
+  color: var(--surface);
+}
+
 .nav-link {
   min-height: 40px;
   padding: 10px 14px;

@@ -6,6 +6,7 @@
     <title>Settings</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/css/app.css">
+    <script src="/static/js/i18n.js" defer></script>
     <script src="/static/js/api-client.js" defer></script>
     <script src="/static/js/settings.js" defer></script>
   </head>
@@ -13,14 +14,18 @@
     <div class="shell">
       <header class="topbar">
         <div>
-          <h1>Settings</h1>
+          <h1 data-i18n="settings">Settings</h1>
           <p>Paynkolay POS</p>
         </div>
-        <nav aria-label="Primary">
-          <a class="nav-link" href="/">Payment</a>
-          <a class="nav-link" href="/parallel">Parallel</a>
-          <a class="nav-link active" href="/settings">Settings</a>
-          <a class="nav-link" href="/reports">Reports</a>
+        <nav aria-label="Primary navigation">
+          <a class="nav-link" href="/" data-i18n="payment">Payment</a>
+          <a class="nav-link" href="/parallel" data-i18n="parallel">Parallel</a>
+          <a class="nav-link active" href="/settings" data-i18n="settings">Settings</a>
+          <a class="nav-link" href="/reports" data-i18n="reports">Reports</a>
+          <div class="language-switcher" aria-label="Language">
+            <button type="button" data-lang-button="en">EN</button>
+            <button type="button" data-lang-button="tr">TR</button>
+          </div>
         </nav>
       </header>
 
