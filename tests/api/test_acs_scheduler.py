@@ -37,11 +37,17 @@ async def test_stable_scheduler_ramps_nkolay_after_four_successes(
 
 
 @pytest.mark.asyncio
-async def test_stable_scheduler_halves_limit_after_chrome_network_error(
+@pytest.mark.parametrize("profile", ["stable", "load"])
+async def test_scheduler_halves_limit_after_chrome_network_error(
     monkeypatch: pytest.MonkeyPatch,
+    profile: str,
 ) -> None:
     monkeypatch.setattr(acs_scheduler, "STABLE_LAUNCH_GAP_SECONDS", 0.0)
-    scheduler = AdaptiveAcsScheduler(profile="stable", requested_concurrency=10)
+    monkeypatch.setattr(acs_scheduler, "LOAD_LAUNCH_GAP_SECONDS", 0.0)
+    scheduler = AdaptiveAcsScheduler(
+        profile=cast(acs_scheduler.ExecutionProfile, profile),
+        requested_concurrency=10,
+    )
 
     async def failed_operation() -> AcsBrowserAutomationResult:
         return AcsBrowserAutomationResult(
@@ -59,31 +65,68 @@ async def test_stable_scheduler_halves_limit_after_chrome_network_error(
 
 
 @pytest.mark.asyncio
-async def test_load_scheduler_uses_requested_concurrency(
+async def test_load_scheduler_uses_requested_concurrency_as_pool_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(acs_scheduler, "STABLE_LAUNCH_GAP_SECONDS", 0.0)
+    monkeypatch.setattr(acs_scheduler, "LOAD_LAUNCH_GAP_SECONDS", 0.0)
     scheduler = AdaptiveAcsScheduler(profile="load", requested_concurrency=8)
     active = 0
     peak = 0
+    initial_wave_started = asyncio.Event()
+    release_initial_wave = asyncio.Event()
 
     async def operation() -> AcsBrowserAutomationResult:
         nonlocal active, peak
         active += 1
         peak = max(peak, active)
-        await asyncio.sleep(0.01)
+        if active == 4:
+            initial_wave_started.set()
+        await release_initial_wave.wait()
         active -= 1
         return _success()
 
-    await asyncio.gather(
+    batch = asyncio.gather(
         *[
             scheduler.execute("nkolay_dynamic_otp_visa_6111", operation)
             for _ in range(8)
         ]
     )
+    await asyncio.wait_for(initial_wave_started.wait(), timeout=1)
+    await asyncio.sleep(0.02)
+    assert active == 4
+    release_initial_wave.set()
+    await batch
 
-    assert peak == 8
-    assert scheduler.snapshot()["peak_concurrency"] == 8
+    pools = cast(dict[str, dict[str, Any]], scheduler.snapshot()["pools"])
+    assert peak <= 5
+    assert pools["nkolay"]["initial_limit"] == 4
+    assert pools["nkolay"]["maximum_limit"] == 8
+
+
+@pytest.mark.asyncio
+async def test_load_scheduler_ramps_toward_requested_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(acs_scheduler, "LOAD_LAUNCH_GAP_SECONDS", 0.0)
+    scheduler = AdaptiveAcsScheduler(profile="load", requested_concurrency=8)
+
+    for _ in range(4):
+        await scheduler.execute("nkolay_dynamic_otp_visa_6111", _successful_operation)
+
+    pools = cast(dict[str, dict[str, Any]], scheduler.snapshot()["pools"])
+    assert pools["nkolay"]["final_limit"] == 5
+    assert pools["nkolay"]["maximum_limit"] == 8
+
+
+@pytest.mark.asyncio
+async def test_requested_concurrency_can_lower_card_initial_limit() -> None:
+    scheduler = AdaptiveAcsScheduler(profile="load", requested_concurrency=2)
+
+    await scheduler.execute("nkolay_dynamic_otp_visa_6111", _successful_operation)
+
+    pools = cast(dict[str, dict[str, Any]], scheduler.snapshot()["pools"])
+    assert pools["nkolay"]["initial_limit"] == 2
+    assert pools["nkolay"]["maximum_limit"] == 2
 
 
 @pytest.mark.asyncio

@@ -72,8 +72,9 @@ Two execution profiles separate a reliable demo from an intentional capacity tes
 
 - `Stable Demo` reuses one Chromium process, isolates every challenge in its own browser
   context, and adapts ACS concurrency per card/provider lane.
-- `Load Test` applies the requested ACS concurrency directly so provider limits remain visible
-  in the result instead of being hidden by automatic backpressure.
+- `Load Test` treats the requested ACS concurrency as a global ceiling. Card/provider lanes
+  still start from their measured baseline, ramp after successful challenges, and back off
+  on transient browser or provider failures.
 
 Current practical baseline:
 

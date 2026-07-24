@@ -1279,6 +1279,10 @@ async def test_parallel_run_limits_automatic_3ds_browser_concurrency(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    monkeypatch.setattr(
+        "paynkolay_pos.api.acs_scheduler.LOAD_LAUNCH_GAP_SECONDS",
+        0.0,
+    )
     _write_parallel_runtime_config(
         monkeypatch,
         tmp_path,
@@ -1326,8 +1330,15 @@ async def test_parallel_run_limits_automatic_3ds_browser_concurrency(
     assert payload["status"] == "completed"
     assert payload["completed"] == 10
     assert len(fake_automator.calls) == 10
-    assert fake_automator.max_active_calls == 4
-    assert payload["acs_scheduler"]["peak_concurrency"] == 4
+    assert 2 <= fake_automator.max_active_calls <= 4
+    assert payload["acs_scheduler"]["requested_concurrency"] == 4
+    assert payload["acs_scheduler"]["peak_concurrency"] <= 4
+    assert payload["acs_scheduler"]["pools"]["card:parallel_3ds"] == {
+        "initial_limit": 2,
+        "final_limit": 4,
+        "maximum_limit": 4,
+        "peak_concurrency": fake_automator.max_active_calls,
+    }
 
 
 @pytest.mark.api

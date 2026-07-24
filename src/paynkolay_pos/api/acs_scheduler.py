@@ -13,6 +13,7 @@ from paynkolay_pos.three_ds import AcsBrowserAutomationResult
 
 ExecutionProfile = Literal["stable", "load"]
 STABLE_LAUNCH_GAP_SECONDS = 0.25
+LOAD_LAUNCH_GAP_SECONDS = 0.1
 STABLE_SUCCESS_RAMP_WINDOW = 4
 STABLE_FAILURE_COOLDOWN_SECONDS = 2.0
 
@@ -48,7 +49,7 @@ class AcsExecution:
 
 
 class AdaptiveAcsScheduler:
-    """Run ACS work through stable adaptive or direct load-test limits."""
+    """Run ACS work through card-aware adaptive limits."""
 
     def __init__(
         self,
@@ -110,7 +111,11 @@ class AdaptiveAcsScheduler:
 
     async def _acquire(self, card_alias: str) -> _AcsPoolState:
         state = self._pool(card_alias)
-        launch_gap = STABLE_LAUNCH_GAP_SECONDS if self.profile == "stable" else 0.0
+        launch_gap = (
+            STABLE_LAUNCH_GAP_SECONDS
+            if self.profile == "stable"
+            else LOAD_LAUNCH_GAP_SECONDS
+        )
         while True:
             delay = 0.01
             async with self._condition:
@@ -145,7 +150,7 @@ class AdaptiveAcsScheduler:
         async with self._condition:
             self._active -= 1
             state.active -= 1
-            if self.profile == "stable" and not state.policy.fixed:
+            if not state.policy.fixed:
                 self._adapt(state, result=result)
             self._condition.notify_all()
 
@@ -172,12 +177,13 @@ class AdaptiveAcsScheduler:
         state = self._pools.get(policy.group)
         if state is not None:
             return state
-        if self.profile == "load" and not policy.fixed:
-            policy = AcsPoolPolicy(
-                group=policy.group,
-                initial_limit=self.requested_concurrency,
-                maximum_limit=self.requested_concurrency,
-            )
+        maximum_limit = min(policy.maximum_limit, self.requested_concurrency)
+        policy = AcsPoolPolicy(
+            group=policy.group,
+            initial_limit=min(policy.initial_limit, maximum_limit),
+            maximum_limit=maximum_limit,
+            fixed=policy.fixed,
+        )
         state = _AcsPoolState(policy=policy, limit=policy.initial_limit)
         self._pools[policy.group] = state
         return state
