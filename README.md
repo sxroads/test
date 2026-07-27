@@ -62,6 +62,29 @@ Supported automatic 3DS behavior includes:
 The automation does not invent OTPs. If no safe OTP source is available, the payment is left
 with a clear diagnostic reason.
 
+## Installment Options
+
+The Payment screen uses deterministic local options in local/mock environments and the real
+Paynkolay `Payment/PaymentInstallments` service in UAT. The UAT lookup sends the configured
+dedicated installment `sx`, amount, and test card as multipart form data; it does not create
+a payment.
+
+Each provider option includes its own opaque `EncodedValue`. When a tester selects an
+installment, the UI returns that value to the payment API and the provider form request sends
+it together with `installmentNo`. Installment payments above one installment are rejected
+before the provider call when no matching encoded quote is present.
+
+The dedicated installment key is loaded from ignored credential input into
+`merchant.installment_api_key`. `make uat-inputs` reads the local-only
+`credentials/installment/servisler.md` file when it builds the private runtime config.
+
+Parallel runs also accept one run-level installment count. Counts above one resolve a fresh
+card-and-amount-specific quote for every item before payment initialization; quote lookups
+use a separate concurrency limit of five and opaque encoded values are never persisted in
+parallel evidence. Single-payment runs keep the existing path and do not call the installment
+service. The CLI equivalent is `--installment-count`, or
+`UAT_PARALLEL_INSTALLMENT_COUNT` with `make uat-parallel-3ds-smoke`.
+
 ## Parallel Testing
 
 Parallel testing is intended for confidence runs and UAT regression checks. The UI supports
