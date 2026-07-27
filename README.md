@@ -38,7 +38,8 @@ The web UI is split into four practical areas:
 
 - **Payment**: single payment testing, card selection, MoTo/3DS flow, provider result,
   PaymentList result, and authorization evidence.
-- **Parallel**: multi-card parallel test execution with manual or random card selection.
+- **Parallel**: multi-card parallel test execution with manual or random card selection and
+  one run-level installment count.
 - **Settings**: runtime environment and configured card overview.
 - **Reports**: Allure status, latest test run summary, credential report execution, and
   saved parallel evidence.
@@ -85,6 +86,16 @@ parallel evidence. Single-payment runs keep the existing path and do not call th
 service. The CLI equivalent is `--installment-count`, or
 `UAT_PARALLEL_INSTALLMENT_COUNT` with `make uat-parallel-3ds-smoke`.
 
+To test installments from the UI:
+
+```bash
+make uat-web WEB_PORT=8001 WEB_RELOAD=--reload
+```
+
+Open `http://127.0.0.1:8001`. The Payment screen loads provider-supported options for the
+selected card and amount. The Parallel screen applies its installment selection to every
+item; selecting a count above one creates real UAT payments after the run is started.
+
 ## Parallel Testing
 
 Parallel testing is intended for confidence runs and UAT regression checks. The UI supports
@@ -117,6 +128,7 @@ The guarded CLI exposes the same profiles:
 ```bash
 make uat-parallel-3ds-smoke UAT_PARALLEL_3DS_ARGS="--profile stable"
 make uat-parallel-3ds-smoke UAT_PARALLEL_3DS_ARGS="--profile load --acs-concurrency 20"
+make uat-parallel-3ds-smoke UAT_PARALLEL_INSTALLMENT_COUNT=3 UAT_PARALLEL_3DS_AMOUNT=1000.00
 ```
 
 ## Result Language
@@ -132,6 +144,8 @@ Common result meanings:
 - `acs_manual_required`: the 3D Secure page requires human approval or SMS handling.
 - `acs_browser_client_rejected`: the bank simulator rejected the browser client.
 - `payment_list_missing`: provider flow completed, but PaymentList did not confirm the row.
+- `installment_option_unavailable`: the selected count is not offered for that card/amount.
+- `installment_lookup_failed`: the installment service did not return a usable response.
 - `network_error`: request failed before a reliable provider response was available.
 - `framework_error`: application-side unexpected error.
 
@@ -148,13 +162,14 @@ Evidence includes:
 - PaymentList status,
 - 3DS automation status and reason,
 - diagnostic classifications,
-- timing information.
+- installment count and quote source without the opaque encoded value,
+- initialization/installment/ACS/PaymentList timing information.
 
 Sensitive values are redacted before evidence is printed or saved.
 
 ## Current Completion State
 
-As of July 21, 2026, active feature work is complete and the project is ready for
+As of July 27, 2026, active feature work is complete and the project is ready for
 presentation and handoff.
 
 Confirmed capabilities:
@@ -164,6 +179,8 @@ Confirmed capabilities:
 - UAT 3D Secure initialization,
 - headless automatic 3D Secure completion for supported simulator cards,
 - parallel 3D Secure test runs,
+- real UAT installment option lookup and encoded quote forwarding,
+- parallel installment runs with fresh per-item quotes and bounded lookup concurrency,
 - PaymentList verification with retry/backoff,
 - same-day cancel smoke checks,
 - sanitized JSON evidence,
@@ -175,13 +192,15 @@ Latest local validation:
 ```text
 ruff check        passed
 mypy             passed
-pytest           342 passed, 5 skipped
+pytest           371 passed, 5 skipped
 git diff check   passed
 ```
 
 Latest live UAT highlights:
 
 - N Kolay Visa baseline: 50/50 parallel run passed.
+- N Kolay Visa installment lookup returned supported counts from 1 through 12 without
+  creating a payment.
 - Headless web 3DS test: completed, PaymentList captured, OTP source read from visible page.
 - Parallel evidence is persisted under `reports/parallel-runs/`.
 
