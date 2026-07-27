@@ -2,6 +2,7 @@
   const parallelRunStatus = document.getElementById("parallel-run-status");
   const parallelMode = document.getElementById("parallel-mode");
   const parallelAmount = document.getElementById("parallel-amount");
+  const parallelInstallmentCount = document.getElementById("parallel-installment-count");
   const parallelRandomCountField = document.getElementById("parallel-random-count-field");
   const parallelRandomCount = document.getElementById("parallel-random-count");
   const parallelManualPanel = document.getElementById("parallel-manual-panel");
@@ -14,6 +15,7 @@
   const parallelProgress = document.getElementById("parallel-progress");
   const parallelSuccessRate = document.getElementById("parallel-success-rate");
   const parallelSelectedTotal = document.getElementById("parallel-selected-total");
+  const parallelInstallmentSummary = document.getElementById("parallel-installment-summary");
   const parallelProfileSummary = document.getElementById("parallel-profile-summary");
   const parallelAcsPeak = document.getElementById("parallel-acs-peak");
   const parallelThroughput = document.getElementById("parallel-throughput");
@@ -116,6 +118,7 @@
       mode,
       amount: parallelAmount.value,
       currency: "TRY",
+      installment_count: Number(parallelInstallmentCount.value),
       concurrency: 10,
       execution_profile: "stable",
       auto_complete_3ds: true,
@@ -133,6 +136,7 @@
     parallelRunId.textContent = run.run_id;
     parallelProgress.textContent = `${run.completed + run.failed}/${run.total}`;
     parallelSuccessRate.textContent = formatSuccessRate(run.items || []);
+    parallelInstallmentSummary.textContent = String(run.installment_count || 1);
     parallelProfileSummary.textContent = window.PaynkolayI18n.t("stable_demo");
     parallelAcsPeak.textContent = formatAcsPeak(run);
     parallelThroughput.textContent = formatThroughput(run.metrics);
@@ -177,6 +181,7 @@
         row.className = parallelItemOutcomeClass(item);
         const values = [
           item.card_alias,
+          formatInstallment(item),
           window.PaynkolayI18n.humanizeStatus(item.status),
           window.PaynkolayI18n.humanizeStatus(item.classification),
           window.PaynkolayI18n.humanizeStatus(item.payment_list_status || item.payment_list_error || "-"),
@@ -192,6 +197,14 @@
         return row;
       }),
     );
+  }
+
+  function formatInstallment(item) {
+    const count = item.installment_count || 1;
+    if (!item.installment_source) {
+      return String(count);
+    }
+    return `${count} (${item.installment_source})`;
   }
 
   function parallelItemOutcomeClass(item) {
@@ -270,6 +283,9 @@
 
   parallelMode.addEventListener("change", renderParallelMode);
   parallelRandomCount.addEventListener("input", renderParallelSelections);
+  parallelInstallmentCount.addEventListener("change", () => {
+    parallelInstallmentSummary.textContent = parallelInstallmentCount.value;
+  });
 
   parallelAddCard.addEventListener("click", () => {
     if (!parallelCardSelect.value) {
@@ -313,5 +329,6 @@
 
   renderParallelMode();
   renderParallelSelections();
+  parallelInstallmentSummary.textContent = parallelInstallmentCount.value;
   loadParallelCards();
 })();

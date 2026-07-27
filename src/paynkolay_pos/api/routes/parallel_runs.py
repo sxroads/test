@@ -10,19 +10,28 @@ from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
 from time import perf_counter
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from pydantic import SecretStr
 
 from paynkolay_pos.api.acs_scheduler import AdaptiveAcsScheduler
 from paynkolay_pos.api.dependencies import (
     SupportsThreeDSAutomator,
+    get_optional_installment_provider,
     get_parallel_run_store,
     get_payment_initializer,
     get_payment_session_store,
     get_three_ds_automator,
     get_three_ds_form_store,
+)
+from paynkolay_pos.api.installment_provider import (
+    InstallmentOptionUnavailableError,
+    InstallmentProviderLookupError,
+    SupportsInstallmentProvider,
+    local_stub_installment_counts,
+    select_installment_quote,
 )
 from paynkolay_pos.api.parallel_run_store import (
     ParallelRunItemState,
@@ -75,6 +84,7 @@ FINAL_PAYMENT_LIST_STATUSES = {
     PaymentStatus.FAILED,
 }
 SUBMITTED_3DS_PAYMENT_LIST_RETRY_DELAYS = (2.0, 5.0, 10.0, 20.0)
+INSTALLMENT_LOOKUP_CONCURRENCY = 5
 
 PaymentInitializerDependency = Annotated[
     SupportsPaymentInitializer,
@@ -96,6 +106,10 @@ ParallelRunStoreDependency = Annotated[
     ParallelRunStore,
     Depends(get_parallel_run_store),
 ]
+OptionalInstallmentProviderDependency = Annotated[
+    SupportsInstallmentProvider | None,
+    Depends(get_optional_installment_provider),
+]
 
 
 @router.post("", response_model=ParallelRunResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -108,19 +122,26 @@ async def create_parallel_run(
     three_ds_form_store: ThreeDSFormStoreDependency,
     automator: ThreeDSAutomatorDependency,
     run_store: ParallelRunStoreDependency,
+    installment_provider: OptionalInstallmentProviderDependency,
 ) -> ParallelRunResponse:
     """Start a parallel payment initialization run from configured cards."""
 
     cards = _load_card_map()
+    _require_uat_installment_provider(request, installment_provider)
     selected_cards = _select_cards(request, cards)
     run_id = uuid4().hex[:12]
-    items = _parallel_items(run_id=run_id, selected_cards=selected_cards)
+    items = _parallel_items(
+        run_id=run_id,
+        selected_cards=selected_cards,
+        installment_count=request.installment_count,
+    )
     run = ParallelRunState(
         run_id=run_id,
         mode=request.mode,
         execution_profile=request.execution_profile,
         concurrency=request.concurrency,
         acs_concurrency=request.effective_acs_concurrency,
+        installment_count=request.installment_count,
         items=items,
         status="running",
         started_at=utc_now(),
@@ -135,6 +156,8 @@ async def create_parallel_run(
         currency=request.currency,
         client_host=_client_host(http_request),
         auto_complete_3ds=request.auto_complete_3ds,
+        installment_count=request.installment_count,
+        installment_provider=installment_provider,
         initializer=initializer,
         automator=automator,
         session_store=session_store,
@@ -180,6 +203,8 @@ async def _execute_parallel_run(
     currency: Currency,
     client_host: str,
     auto_complete_3ds: bool,
+    installment_count: int,
+    installment_provider: SupportsInstallmentProvider | None,
     initializer: SupportsPaymentInitializer,
     automator: SupportsThreeDSAutomator,
     session_store: PaymentSessionStore,
@@ -188,6 +213,7 @@ async def _execute_parallel_run(
 ) -> None:
     run = await run_store.get(run_id)
     initialization_semaphore = asyncio.Semaphore(run.concurrency)
+    installment_lookup_semaphore = asyncio.Semaphore(INSTALLMENT_LOOKUP_CONCURRENCY)
     payment_list_semaphore = asyncio.Semaphore(
         run.concurrency if run.execution_profile == "load" else min(run.concurrency, 10)
     )
@@ -206,12 +232,15 @@ async def _execute_parallel_run(
             currency=currency,
             client_host=client_host,
             auto_complete_3ds=auto_complete_3ds,
+            installment_count=installment_count,
+            installment_provider=installment_provider,
             initializer=initializer,
             automator=automator,
             session_store=session_store,
             three_ds_form_store=three_ds_form_store,
             run_store=run_store,
             initialization_semaphore=initialization_semaphore,
+            installment_lookup_semaphore=installment_lookup_semaphore,
             payment_list_semaphore=payment_list_semaphore,
             acs_scheduler=acs_scheduler,
             serial_3ds_locks=serial_3ds_locks,
@@ -233,12 +262,15 @@ async def _execute_item(
     currency: Currency,
     client_host: str,
     auto_complete_3ds: bool,
+    installment_count: int,
+    installment_provider: SupportsInstallmentProvider | None,
     initializer: SupportsPaymentInitializer,
     automator: SupportsThreeDSAutomator,
     session_store: PaymentSessionStore,
     three_ds_form_store: ThreeDSFormStore,
     run_store: ParallelRunStore,
     initialization_semaphore: asyncio.Semaphore,
+    installment_lookup_semaphore: asyncio.Semaphore,
     payment_list_semaphore: asyncio.Semaphore,
     acs_scheduler: AdaptiveAcsScheduler,
     serial_3ds_locks: dict[str, asyncio.Lock],
@@ -254,12 +286,15 @@ async def _execute_item(
                 currency=currency,
                 client_host=client_host,
                 auto_complete_3ds=auto_complete_3ds,
+                installment_count=installment_count,
+                installment_provider=installment_provider,
                 initializer=initializer,
                 automator=automator,
                 session_store=session_store,
                 three_ds_form_store=three_ds_form_store,
                 run_store=run_store,
                 initialization_semaphore=initialization_semaphore,
+                installment_lookup_semaphore=installment_lookup_semaphore,
                 payment_list_semaphore=payment_list_semaphore,
                 acs_scheduler=acs_scheduler,
             )
@@ -273,15 +308,42 @@ async def _execute_item(
                     currency=currency,
                     client_host=client_host,
                     auto_complete_3ds=auto_complete_3ds,
+                    installment_count=installment_count,
+                    installment_provider=installment_provider,
                     initializer=initializer,
                     automator=automator,
                     session_store=session_store,
                     three_ds_form_store=three_ds_form_store,
                     run_store=run_store,
                     initialization_semaphore=initialization_semaphore,
+                    installment_lookup_semaphore=installment_lookup_semaphore,
                     payment_list_semaphore=payment_list_semaphore,
                     acs_scheduler=acs_scheduler,
                 )
+    except InstallmentOptionUnavailableError as exc:
+        error_message = str(exc)
+        await _mark_session_failed(session_store, item.order_id, error_message)
+        await run_store.mutate(
+            run_id,
+            lambda run: _mark_item_failed(
+                run,
+                item.item_id,
+                classification="installment_option_unavailable",
+                error_message=error_message,
+            ),
+        )
+    except InstallmentProviderLookupError as exc:
+        error_message = str(exc)
+        await _mark_session_failed(session_store, item.order_id, error_message)
+        await run_store.mutate(
+            run_id,
+            lambda run: _mark_item_failed(
+                run,
+                item.item_id,
+                classification="installment_lookup_failed",
+                error_message=error_message,
+            ),
+        )
     except PaymentProviderInitializationError as exc:
         classification = _classify_initialization_error(exc)
         error_message = str(exc)
@@ -326,19 +388,35 @@ async def _execute_item_attempt(
     currency: Currency,
     client_host: str,
     auto_complete_3ds: bool,
+    installment_count: int,
+    installment_provider: SupportsInstallmentProvider | None,
     initializer: SupportsPaymentInitializer,
     automator: SupportsThreeDSAutomator,
     session_store: PaymentSessionStore,
     three_ds_form_store: ThreeDSFormStore,
     run_store: ParallelRunStore,
     initialization_semaphore: asyncio.Semaphore,
+    installment_lookup_semaphore: asyncio.Semaphore,
     payment_list_semaphore: asyncio.Semaphore,
     acs_scheduler: AdaptiveAcsScheduler,
 ) -> None:
+    encoded_value = await _resolve_parallel_installment(
+        run_id=run_id,
+        item=item,
+        card=card,
+        amount=amount,
+        currency=currency,
+        installment_count=installment_count,
+        provider=installment_provider,
+        run_store=run_store,
+        semaphore=installment_lookup_semaphore,
+    )
     request = _payment_form_request(
         card=card,
         amount=amount,
         currency=currency,
+        installment_count=installment_count,
+        installment_encoded_value=encoded_value,
     )
     await session_store.create(
         order_id=item.order_id,
@@ -351,7 +429,11 @@ async def _execute_item_attempt(
     )
     initialization_started = perf_counter()
     async with initialization_semaphore:
-        await run_store.mutate(run_id, lambda run: _mark_item_running(run, item.item_id))
+        if installment_count == 1:
+            await run_store.mutate(
+                run_id,
+                lambda run: _mark_item_running(run, item.item_id),
+            )
         outcome = await initializer.initialize(
             request,
             order_id=item.order_id,
@@ -374,6 +456,66 @@ async def _execute_item_attempt(
         payment_list_semaphore=payment_list_semaphore,
         acs_scheduler=acs_scheduler,
     )
+
+
+async def _resolve_parallel_installment(
+    *,
+    run_id: str,
+    item: ParallelRunItemState,
+    card: TestCard,
+    amount: Decimal,
+    currency: Currency,
+    installment_count: int,
+    provider: SupportsInstallmentProvider | None,
+    run_store: ParallelRunStore,
+    semaphore: asyncio.Semaphore,
+) -> SecretStr | None:
+    if installment_count == 1:
+        return None
+
+    source: Literal["local_stub", "paynkolay_uat"] = (
+        "paynkolay_uat" if provider is not None else "local_stub"
+    )
+    started_at = perf_counter()
+    try:
+        async with semaphore:
+            await run_store.mutate(
+                run_id,
+                lambda run: _mark_item_running(run, item.item_id),
+            )
+            if provider is None:
+                available_counts = local_stub_installment_counts(
+                    amount=amount,
+                    currency=currency.value,
+                )
+                if installment_count not in available_counts:
+                    raise InstallmentOptionUnavailableError(
+                        f"installment count {installment_count} is unavailable "
+                        "for this card and amount"
+                    )
+                return None
+
+            response = await provider.get_options(
+                amount=amount,
+                card_number=card.pan,
+            )
+            quote = select_installment_quote(
+                response,
+                installment_count=installment_count,
+                currency=currency.value,
+            )
+            return quote.encoded_value
+    finally:
+        elapsed_ms = _elapsed_ms(started_at)
+        await run_store.mutate(
+            run_id,
+            lambda run: _record_installment_lookup(
+                run,
+                item.item_id,
+                source=source,
+                elapsed_ms=elapsed_ms,
+            ),
+        )
 
 
 async def _mark_session_failed(
@@ -620,6 +762,23 @@ def _load_card_map() -> dict[str, TestCard]:
     return {card.alias: card for card in cards}
 
 
+def _require_uat_installment_provider(
+    request: ParallelRunCreateRequest,
+    provider: SupportsInstallmentProvider | None,
+) -> None:
+    if request.installment_count == 1 or provider is not None:
+        return
+    try:
+        environment = load_runtime_settings().current
+    except (FileNotFoundError, RuntimeError, ValueError):
+        return
+    if environment.name.value == "uat":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="runtime installment API key is unavailable",
+        )
+
+
 def _serial_3ds_locks_for_run(
     items: Sequence[ParallelRunItemState],
     cards_by_alias: dict[str, TestCard],
@@ -674,6 +833,7 @@ def _parallel_items(
     *,
     run_id: str,
     selected_cards: list[TestCard],
+    installment_count: int,
 ) -> list[ParallelRunItemState]:
     attempts_by_alias: Counter[str] = Counter()
     items: list[ParallelRunItemState] = []
@@ -687,6 +847,7 @@ def _parallel_items(
                 attempt_index=attempts_by_alias[card.alias],
                 order_id=f"batch-{run_id[:8]}-{index:03d}",
                 requires_3ds=card.requires_3ds,
+                installment_count=installment_count,
                 automation_status=behavior.status.value,
                 automation_reason=behavior.reason,
                 diagnostic_class=behavior.diagnostic_class,
@@ -701,6 +862,8 @@ def _payment_form_request(
     card: TestCard,
     amount: Decimal,
     currency: Currency,
+    installment_count: int,
+    installment_encoded_value: SecretStr | None,
 ) -> PaymentFormRequest:
     return PaymentFormRequest(
         amount=amount,
@@ -712,7 +875,8 @@ def _payment_form_request(
         expiry_year=card.expiry_year,
         cvv=card.cvv,
         requires_3ds=card.requires_3ds,
-        installment_count=1,
+        installment_count=installment_count,
+        installment_encoded_value=installment_encoded_value,
     )
 
 
@@ -723,6 +887,18 @@ def _mark_item_running(run: ParallelRunState, item_id: str) -> None:
     item.started_at = utc_now()
     active_items = sum(candidate.status == "running" for candidate in run.items)
     run.peak_active_items = max(run.peak_active_items, active_items)
+
+
+def _record_installment_lookup(
+    run: ParallelRunState,
+    item_id: str,
+    *,
+    source: Literal["local_stub", "paynkolay_uat"],
+    elapsed_ms: int,
+) -> None:
+    item = _item(run, item_id)
+    item.installment_source = source
+    item.installment_lookup_ms = elapsed_ms
 
 
 def _mark_item_completed(

@@ -18,6 +18,22 @@ def test_parallel_request_defaults_to_stable_profile() -> None:
 
     assert request.execution_profile == "stable"
     assert request.effective_acs_concurrency == 10
+    assert request.installment_count == 1
+
+
+def test_parallel_request_accepts_run_level_installment_count() -> None:
+    request = ParallelRunCreateRequest.model_validate(
+        {
+            "mode": "manual",
+            "amount": "1000.00",
+            "installment_count": 12,
+            "manual_cards": [
+                {"alias": "nkolay_dynamic_otp_visa_6111", "repeat_count": 2}
+            ],
+        }
+    )
+
+    assert request.installment_count == 12
 
 
 def test_parallel_request_rejects_manual_acs_limit_in_stable_profile() -> None:

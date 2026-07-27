@@ -17,9 +17,12 @@ from paynkolay_pos.api import payment_list_retry
 from paynkolay_pos.api.app import create_app
 from paynkolay_pos.api.dependencies import (
     get_external_payment_logger,
+    get_installment_provider,
+    get_optional_installment_provider,
     get_payment_initializer,
     get_three_ds_automator,
 )
+from paynkolay_pos.api.installment_provider import InstallmentProviderLookupError
 from paynkolay_pos.api.payment_initializer import (
     PaymentInitializationOutcome,
     PaymentProviderInitializationError,
@@ -33,6 +36,7 @@ from paynkolay_pos.models import (
     PaymentCardInput,
     PaymentInitializeRequest,
     PaymentStatus,
+    PaynkolayInstallmentResponse,
     PaynkolayPaymentResult,
     PaynkolayThreeDSInitializeResult,
     TransactionStatusResponse,
@@ -210,6 +214,90 @@ class FakePaymentInitializer:
         )
 
 
+class FakeInstallmentProvider:
+    async def get_options(
+        self,
+        *,
+        amount: Decimal,
+        card_number: object,
+    ) -> PaynkolayInstallmentResponse:
+        return PaynkolayInstallmentResponse.model_validate(
+            {
+                "PAYMENT_BANK_LIST": [
+                    {
+                        "INSTALLMENT_AMOUNT": "350.88",
+                        "INSTALLMENT": 3,
+                        "COMMISION_AMOUNT": "52.63",
+                        "COMMISION": "5.00",
+                        "TRANSACTION_AMOUNT": amount,
+                        "AUTHORIZATION_AMOUNT": "1052.63",
+                        "EncodedValue": "opaque-provider-quote",
+                        "CURRENCY_CODE": "TRY",
+                    }
+                ],
+                "RESPONSE_DATA": "İşlem Başarılı.",
+                "RESPONSE_CODE": 2,
+            }
+        )
+
+
+class ParallelInstallmentProvider:
+    def __init__(
+        self,
+        *,
+        unavailable_pan_suffixes: set[str] | None = None,
+        fail: bool = False,
+        delay_seconds: float = 0.0,
+    ) -> None:
+        self.unavailable_pan_suffixes = unavailable_pan_suffixes or set()
+        self.fail = fail
+        self.delay_seconds = delay_seconds
+        self.calls: list[str] = []
+        self.active_calls = 0
+        self.max_active_calls = 0
+
+    async def get_options(
+        self,
+        *,
+        amount: Decimal,
+        card_number: object,
+    ) -> PaynkolayInstallmentResponse:
+        pan = cast(Any, card_number).get_secret_value()
+        suffix = pan[-4:]
+        call_index = len(self.calls) + 1
+        self.calls.append(suffix)
+        self.active_calls += 1
+        self.max_active_calls = max(self.max_active_calls, self.active_calls)
+        try:
+            if self.delay_seconds:
+                await asyncio.sleep(self.delay_seconds)
+            if self.fail:
+                raise InstallmentProviderLookupError(
+                    "provider installment lookup failed"
+                )
+            installment_count = 2 if suffix in self.unavailable_pan_suffixes else 3
+            return PaynkolayInstallmentResponse.model_validate(
+                {
+                    "PAYMENT_BANK_LIST": [
+                        {
+                            "INSTALLMENT_AMOUNT": "350.88",
+                            "INSTALLMENT": installment_count,
+                            "COMMISION_AMOUNT": "52.63",
+                            "COMMISION": "5.00",
+                            "TRANSACTION_AMOUNT": amount,
+                            "AUTHORIZATION_AMOUNT": "1052.63",
+                            "EncodedValue": f"opaque-parallel-quote-{call_index}",
+                            "CURRENCY_CODE": "TRY",
+                        }
+                    ],
+                    "RESPONSE_DATA": "İşlem Başarılı.",
+                    "RESPONSE_CODE": 2,
+                }
+            )
+        finally:
+            self.active_calls -= 1
+
+
 def _payment_request(
     request: PaymentFormRequest,
     *,
@@ -232,6 +320,7 @@ def _payment_request(
         ),
         requires_3ds=request.requires_3ds,
         installment_count=request.installment_count,
+        installment_encoded_value=request.installment_encoded_value,
         correlation_id=f"web-{order_id}",
     )
 
@@ -376,6 +465,8 @@ async def test_parallel_page_renders_parallel_run_screen(client: httpx.AsyncClie
     assert 'id="parallel-3ds-mode-auto"' not in response.text
     assert 'id="parallel-selection-body"' in response.text
     assert 'id="parallel-results-body"' in response.text
+    assert 'id="parallel-installment-count"' in response.text
+    assert 'id="parallel-installment-summary"' in response.text
     assert 'id="parallel-evidence-path"' in response.text
     assert 'id="parallel-success-rate"' in response.text
     assert 'id="parallel-concurrency"' not in response.text
@@ -386,7 +477,7 @@ async def test_parallel_page_renders_parallel_run_screen(client: httpx.AsyncClie
     assert 'id="parallel-random-count" type="number" min="1" max="150"' in response.text
     assert 'id="parallel-repeat-count" type="number" min="1" max="150"' in response.text
     assert "Parallel 3D Secure runs complete automatically" in response.text
-    assert "/static/js/parallel-runs.js?v=adaptive-acs-profiles" in response.text
+    assert "/static/js/parallel-runs.js?v=parallel-installments-1" in response.text
 
 
 @pytest.mark.api
@@ -1058,6 +1149,261 @@ async def test_parallel_run_manual_mode_repeats_selected_cards(
     assert "4111111111111111" not in json.dumps(evidence)
     assert len(fake_initializer.calls) == 2
     assert "4111111111111111" not in response.text
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_parallel_installment_run_uses_fresh_quotes_with_bounded_lookup_concurrency(
+    fake_initializer: FakePaymentInitializer,
+    fake_automator: FakeThreeDSAutomator,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    evidence_dir = tmp_path / "parallel-installment-evidence"
+    monkeypatch.setenv("PAYNKOLAY_PARALLEL_EVIDENCE_DIR", str(evidence_dir))
+    _write_parallel_runtime_config(
+        monkeypatch,
+        tmp_path,
+        [
+            _runtime_card(
+                alias="parallel_installment_moto",
+                pan="4111111111111111",
+                requires_3ds=False,
+            ),
+        ],
+    )
+    fake_initializer.provider_result = _payment_result(
+        response_code="2",
+        response_data="Islem Basarili",
+    )
+    installment_provider = ParallelInstallmentProvider(delay_seconds=0.02)
+    app = create_app()
+    app.dependency_overrides[get_payment_initializer] = lambda: fake_initializer
+    app.dependency_overrides[get_three_ds_automator] = lambda: fake_automator
+    app.dependency_overrides[get_optional_installment_provider] = (
+        lambda: installment_provider
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as test_client:
+        response = await test_client.post(
+            "/api/parallel-runs",
+            json={
+                "mode": "manual",
+                "amount": "1000.00",
+                "currency": "TRY",
+                "installment_count": 3,
+                "concurrency": 10,
+                "manual_cards": [
+                    {"alias": "parallel_installment_moto", "repeat_count": 8}
+                ],
+            },
+        )
+        assert response.status_code == 202
+        payload = await _wait_parallel_run(test_client, response.json()["run_id"])
+
+    assert payload["status"] == "completed"
+    assert payload["installment_count"] == 3
+    assert len(installment_provider.calls) == 8
+    assert installment_provider.max_active_calls == 5
+    assert len(fake_initializer.requests) == 8
+    encoded_values = {
+        request.installment_encoded_value.get_secret_value()
+        for request in fake_initializer.requests
+        if request.installment_encoded_value is not None
+    }
+    assert len(encoded_values) == 8
+    assert all(request.installment_count == 3 for request in fake_initializer.requests)
+    assert all(item["installment_count"] == 3 for item in payload["items"])
+    assert all(item["installment_source"] == "paynkolay_uat" for item in payload["items"])
+    assert all(
+        item["stage_timings"]["installment_lookup_ms"] is not None
+        for item in payload["items"]
+    )
+    evidence = Path(payload["evidence_path"]).read_text(encoding="utf-8")
+    assert "opaque-parallel-quote" not in evidence
+    assert "4111111111111111" not in evidence
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_parallel_single_payment_does_not_lookup_installments(
+    fake_initializer: FakePaymentInitializer,
+    fake_automator: FakeThreeDSAutomator,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_parallel_runtime_config(
+        monkeypatch,
+        tmp_path,
+        [
+            _runtime_card(
+                alias="parallel_single_payment",
+                pan="4111111111111111",
+                requires_3ds=False,
+            ),
+        ],
+    )
+    fake_initializer.provider_result = _payment_result(
+        response_code="2",
+        response_data="Islem Basarili",
+    )
+    installment_provider = ParallelInstallmentProvider(fail=True)
+    app = create_app()
+    app.dependency_overrides[get_payment_initializer] = lambda: fake_initializer
+    app.dependency_overrides[get_three_ds_automator] = lambda: fake_automator
+    app.dependency_overrides[get_optional_installment_provider] = (
+        lambda: installment_provider
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as test_client:
+        response = await test_client.post(
+            "/api/parallel-runs",
+            json={
+                "mode": "manual",
+                "amount": "100.00",
+                "currency": "TRY",
+                "concurrency": 1,
+                "manual_cards": [
+                    {"alias": "parallel_single_payment", "repeat_count": 1}
+                ],
+            },
+        )
+        payload = await _wait_parallel_run(test_client, response.json()["run_id"])
+
+    assert payload["status"] == "completed"
+    assert payload["installment_count"] == 1
+    assert payload["items"][0]["stage_timings"]["installment_lookup_ms"] == 0
+    assert installment_provider.calls == []
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_parallel_installment_unavailable_fails_only_affected_item(
+    fake_initializer: FakePaymentInitializer,
+    fake_automator: FakeThreeDSAutomator,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_parallel_runtime_config(
+        monkeypatch,
+        tmp_path,
+        [
+            _runtime_card(
+                alias="installment_supported",
+                pan="4111111111111111",
+                requires_3ds=False,
+            ),
+            _runtime_card(
+                alias="installment_unsupported",
+                pan="5555555555554444",
+                requires_3ds=False,
+            ),
+        ],
+    )
+    fake_initializer.provider_result = _payment_result(
+        response_code="2",
+        response_data="Islem Basarili",
+    )
+    installment_provider = ParallelInstallmentProvider(
+        unavailable_pan_suffixes={"4444"}
+    )
+    app = create_app()
+    app.dependency_overrides[get_payment_initializer] = lambda: fake_initializer
+    app.dependency_overrides[get_three_ds_automator] = lambda: fake_automator
+    app.dependency_overrides[get_optional_installment_provider] = (
+        lambda: installment_provider
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as test_client:
+        response = await test_client.post(
+            "/api/parallel-runs",
+            json={
+                "mode": "manual",
+                "amount": "1000.00",
+                "currency": "TRY",
+                "installment_count": 3,
+                "concurrency": 2,
+                "manual_cards": [
+                    {"alias": "installment_supported", "repeat_count": 1},
+                    {"alias": "installment_unsupported", "repeat_count": 1},
+                ],
+            },
+        )
+        payload = await _wait_parallel_run(test_client, response.json()["run_id"])
+
+    assert payload["status"] == "completed_with_failures"
+    assert payload["completed"] == 1
+    assert payload["failed"] == 1
+    assert [item["classification"] for item in payload["items"]] == [
+        "completed",
+        "installment_option_unavailable",
+    ]
+    assert len(fake_initializer.calls) == 1
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_parallel_installment_lookup_failure_skips_payment_initialization(
+    fake_initializer: FakePaymentInitializer,
+    fake_automator: FakeThreeDSAutomator,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_parallel_runtime_config(
+        monkeypatch,
+        tmp_path,
+        [
+            _runtime_card(
+                alias="installment_lookup_failure",
+                pan="4111111111111111",
+                requires_3ds=False,
+            ),
+        ],
+    )
+    installment_provider = ParallelInstallmentProvider(fail=True)
+    app = create_app()
+    app.dependency_overrides[get_payment_initializer] = lambda: fake_initializer
+    app.dependency_overrides[get_three_ds_automator] = lambda: fake_automator
+    app.dependency_overrides[get_optional_installment_provider] = (
+        lambda: installment_provider
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as test_client:
+        response = await test_client.post(
+            "/api/parallel-runs",
+            json={
+                "mode": "manual",
+                "amount": "1000.00",
+                "currency": "TRY",
+                "installment_count": 3,
+                "concurrency": 1,
+                "manual_cards": [
+                    {"alias": "installment_lookup_failure", "repeat_count": 1}
+                ],
+            },
+        )
+        payload = await _wait_parallel_run(test_client, response.json()["run_id"])
+
+    assert payload["status"] == "completed_with_failures"
+    assert payload["items"][0]["classification"] == "installment_lookup_failed"
+    assert payload["items"][0]["installment_source"] == "paynkolay_uat"
+    assert fake_initializer.calls == []
 
 
 @pytest.mark.api
@@ -1996,6 +2342,47 @@ async def test_parallel_run_validation_limits_manual_items(client: httpx.AsyncCl
 
 @pytest.mark.api
 @pytest.mark.asyncio
+async def test_parallel_installment_run_requires_uat_installment_key(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "uat-without-installment-key.json"
+    config_payload = build_private_runtime_config_payload(card_count=10)
+    environments = cast(dict[str, Any], config_payload["environments"])
+    uat = cast(dict[str, Any], environments["uat"])
+    uat["cards"] = [
+        _runtime_card(
+            alias="uat_installment_card",
+            pan="4111111111111111",
+            requires_3ds=False,
+        )
+    ]
+    merchant = cast(dict[str, Any], uat["merchant"])
+    merchant.pop("installment_api_key")
+    config_payload["active_environment"] = "uat"
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    monkeypatch.setenv("PAYNKOLAY_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("PAYNKOLAY_ENV", "uat")
+
+    response = await client.post(
+        "/api/parallel-runs",
+        json={
+            "mode": "manual",
+            "amount": "1000.00",
+            "currency": "TRY",
+            "installment_count": 3,
+            "concurrency": 1,
+            "manual_cards": [{"alias": "uat_installment_card", "repeat_count": 1}],
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "runtime installment API key is unavailable"
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
 async def test_installment_options_returns_local_stub_options_for_try(
     client: httpx.AsyncClient,
 ) -> None:
@@ -2056,6 +2443,45 @@ async def test_installment_options_returns_single_payment_for_small_or_foreign_a
     assert foreign_response.status_code == 200
     assert [option["installment_count"] for option in small_response.json()["options"]] == [1]
     assert [option["installment_count"] for option in foreign_response.json()["options"]] == [1]
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_installment_options_returns_real_provider_quotes() -> None:
+    app = create_app()
+    app.dependency_overrides[get_installment_provider] = lambda: FakeInstallmentProvider()
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as test_client:
+        response = await test_client.post(
+            "/api/installments/options",
+            json={
+                "amount": "1000.00",
+                "currency": "TRY",
+                "card_brand": "visa",
+                "card_number": "4111111111111111",
+                "requires_3ds": True,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "paynkolay_uat"
+    assert payload["default_installment"] == 3
+    assert payload["options"] == [
+        {
+            "installment_count": 3,
+            "label": "3 taksit",
+            "total_amount": "1052.63",
+            "monthly_amount": "350.88",
+            "commission_amount": "52.63",
+            "commission_rate": "5.00",
+            "encoded_value": "opaque-provider-quote",
+        }
+    ]
 
 
 @pytest.mark.api

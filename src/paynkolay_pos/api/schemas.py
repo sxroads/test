@@ -437,6 +437,7 @@ class ParallelRunCreateRequest(BaseModel):
     acs_concurrency: int | None = Field(default=None, ge=1, le=150)
     amount: Decimal = Field(gt=Decimal("0"), max_digits=12, decimal_places=2)
     currency: Currency = Currency.TRY
+    installment_count: int = Field(default=1, ge=1, le=12)
     auto_complete_3ds: bool = False
     manual_cards: list[ParallelRunManualCardSelection] = Field(default_factory=list)
     random_count: int | None = Field(default=None, ge=1, le=150)
@@ -487,6 +488,7 @@ ParallelRunItemAutomationStatus = Literal[
 class ParallelRunStageTimings(BaseModel):
     """Per-stage timings for one parallel payment item."""
 
+    installment_lookup_ms: int | None = Field(default=None, ge=0)
     initialization_ms: int | None = Field(default=None, ge=0)
     acs_wait_ms: int | None = Field(default=None, ge=0)
     acs_duration_ms: int | None = Field(default=None, ge=0)
@@ -503,6 +505,8 @@ class ParallelRunItemResponse(BaseModel):
     status: Literal["pending", "running", "completed", "failed"]
     classification: str
     requires_3ds: bool
+    installment_count: int = Field(ge=1, le=12)
+    installment_source: Literal["local_stub", "paynkolay_uat"] | None = None
     automation_status: ParallelRunItemAutomationStatus
     automation_reason: str
     diagnostic_class: str
@@ -558,6 +562,7 @@ class ParallelRunResponse(BaseModel):
     status: Literal["pending", "running", "completed", "completed_with_failures", "failed"]
     concurrency: int
     acs_concurrency: int
+    installment_count: int = Field(ge=1, le=12)
     total: int
     completed: int
     failed: int

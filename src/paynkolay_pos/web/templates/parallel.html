@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/static/css/app.css">
     <script src="/static/js/i18n.js?v=language-fix-1" defer></script>
     <script src="/static/js/api-client.js" defer></script>
-    <script src="/static/js/parallel-runs.js?v=adaptive-acs-profiles" defer></script>
+    <script src="/static/js/parallel-runs.js?v=parallel-installments-1" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -45,6 +45,23 @@
             <label class="field">
               <span data-i18n="amount">Amount</span>
               <input id="parallel-amount" type="number" min="1" step="0.01" value="100">
+            </label>
+            <label class="field">
+              <span data-i18n="installment">Installment</span>
+              <select id="parallel-installment-count">
+                <option value="1" data-i18n="one_shot">Single payment</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+                <option value="12">12</option>
+              </select>
             </label>
             <label class="field" id="parallel-random-count-field">
               <span data-i18n="random_count">Random count</span>
@@ -101,6 +118,10 @@
               <dd id="parallel-selected-total">0</dd>
             </div>
             <div>
+              <dt data-i18n="installment">Installment</dt>
+              <dd id="parallel-installment-summary">1</dd>
+            </div>
+            <div>
               <dt data-i18n="execution_profile">Profile</dt>
               <dd id="parallel-profile-summary" data-i18n="stable_demo">Stable Demo</dd>
             </div>
@@ -130,6 +151,7 @@
               <thead>
                 <tr>
                   <th data-i18n="card">Card</th>
+                  <th data-i18n="installment">Installment</th>
                   <th data-i18n="status">Status</th>
                   <th data-i18n="class_name">Class</th>
                   <th data-i18n="payment_list">PaymentList</th>

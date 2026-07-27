@@ -34,10 +34,12 @@ class ParallelRunItemState:
     attempt_index: int
     order_id: str
     requires_3ds: bool
+    installment_count: int
     automation_status: ParallelRunItemAutomationStatus
     automation_reason: str
     diagnostic_class: str
     automatic_success_candidate: bool
+    installment_source: Literal["local_stub", "paynkolay_uat"] | None = None
     status: ParallelRunItemStatus = "pending"
     classification: str = "pending"
     provider_request: ProviderRequestSummary | None = None
@@ -49,6 +51,7 @@ class ParallelRunItemState:
     three_ds_automation: ThreeDSAutomationSummary | None = None
     error_message: str | None = None
     three_ds_url: str | None = None
+    installment_lookup_ms: int | None = None
     initialization_ms: int | None = None
     acs_wait_ms: int | None = None
     acs_duration_ms: int | None = None
@@ -75,6 +78,8 @@ class ParallelRunItemState:
             status=self.status,
             classification=self.classification,
             requires_3ds=self.requires_3ds,
+            installment_count=self.installment_count,
+            installment_source=self.installment_source,
             automation_status=self.automation_status,
             automation_reason=self.automation_reason,
             diagnostic_class=self.diagnostic_class,
@@ -89,6 +94,9 @@ class ParallelRunItemState:
             error_message=self.error_message,
             duration_ms=self.duration_ms,
             stage_timings=ParallelRunStageTimings(
+                installment_lookup_ms=(
+                    0 if self.installment_count == 1 else self.installment_lookup_ms
+                ),
                 initialization_ms=self.initialization_ms,
                 acs_wait_ms=self.acs_wait_ms,
                 acs_duration_ms=self.acs_duration_ms,
@@ -107,6 +115,7 @@ class ParallelRunState:
     execution_profile: Literal["stable", "load"]
     concurrency: int
     acs_concurrency: int
+    installment_count: int
     items: list[ParallelRunItemState]
     status: ParallelRunStatus = "pending"
     started_at: datetime | None = None
@@ -128,6 +137,7 @@ class ParallelRunState:
             status=self.status,
             concurrency=self.concurrency,
             acs_concurrency=self.acs_concurrency,
+            installment_count=self.installment_count,
             total=len(self.items),
             completed=completed,
             failed=failed,

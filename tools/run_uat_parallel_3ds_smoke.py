@@ -81,6 +81,12 @@ def main() -> None:
         help="Payment amount used for every item.",
     )
     parser.add_argument(
+        "--installment-count",
+        type=int,
+        default=1,
+        help="Run-level installment count used for every item. Between 1 and 12.",
+    )
+    parser.add_argument(
         "--poll-interval",
         type=float,
         default=1.0,
@@ -113,6 +119,8 @@ def main() -> None:
         raise SystemExit("total item count must be between 1 and 150.")
     if args.concurrency < 1 or args.concurrency > 150:
         raise SystemExit("--concurrency must be between 1 and 150.")
+    if args.installment_count < 1 or args.installment_count > 12:
+        raise SystemExit("--installment-count must be between 1 and 12.")
     if args.acs_concurrency is not None and args.profile != "load":
         raise SystemExit("--acs-concurrency requires --profile load.")
     if args.acs_concurrency is not None and not 1 <= args.acs_concurrency <= 150:
@@ -126,6 +134,7 @@ def main() -> None:
             execution_profile=args.profile,
             acs_concurrency=args.acs_concurrency,
             amount=args.amount,
+            installment_count=args.installment_count,
             poll_interval=args.poll_interval,
             timeout=args.timeout,
             manual_cards=manual_cards,
@@ -143,6 +152,7 @@ async def _run_parallel_smoke(
     execution_profile: str,
     acs_concurrency: int | None,
     amount: str,
+    installment_count: int,
     poll_interval: float,
     timeout: float,
     manual_cards: list[ManualCardSelection],
@@ -182,6 +192,7 @@ async def _run_parallel_smoke(
                 "execution_profile": execution_profile,
                 "acs_concurrency": acs_concurrency,
                 "amount": amount,
+                "installment_count": installment_count,
                 "auto_complete_3ds": True,
                 "mode": "random" if random_mode else "manual",
             }
@@ -200,6 +211,7 @@ async def _run_parallel_smoke(
             json=_parallel_run_request_payload(
                 random_mode=random_mode,
                 amount=amount,
+                installment_count=installment_count,
                 concurrency=concurrency,
                 execution_profile=execution_profile,
                 acs_concurrency=acs_concurrency,
@@ -255,11 +267,13 @@ def _parallel_run_request_payload(
     acs_concurrency: int | None = None,
     count: int,
     selected_cards: list[ManualCardSelection],
+    installment_count: int = 1,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "mode": "random" if random_mode else "manual",
         "amount": amount,
         "currency": "TRY",
+        "installment_count": installment_count,
         "concurrency": concurrency,
         "execution_profile": execution_profile,
         "auto_complete_3ds": True,
