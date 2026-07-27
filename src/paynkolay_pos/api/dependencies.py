@@ -13,6 +13,10 @@ from fastapi import HTTPException, Request, status
 from playwright.async_api import Browser, Playwright, async_playwright
 from pydantic import SecretStr
 
+from paynkolay_pos.api.installment_provider import (
+    PaynkolayInstallmentProvider,
+    SupportsInstallmentProvider,
+)
 from paynkolay_pos.api.parallel_run_store import ParallelRunStore
 from paynkolay_pos.api.payment_initializer import (
     PaynkolayPaymentInitializer,
@@ -254,6 +258,50 @@ async def get_payment_initializer() -> AsyncIterator[SupportsPaymentInitializer]
             environment=environment,
             client=client,
         )
+
+
+async def get_installment_provider() -> AsyncIterator[SupportsInstallmentProvider | None]:
+    """Use the real installment service only in a configured UAT runtime."""
+
+    try:
+        environment = load_runtime_settings().current
+    except (FileNotFoundError, RuntimeError, ValueError):
+        yield None
+        return
+
+    if environment.name.value != "uat":
+        yield None
+        return
+    if environment.merchant.installment_api_key is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="runtime installment API key is unavailable",
+        )
+
+    async with PaynkolayClient(environment) as client:
+        yield PaynkolayInstallmentProvider(client)
+
+
+async def get_optional_installment_provider() -> (
+    AsyncIterator[SupportsInstallmentProvider | None]
+):
+    """Return a real UAT installment provider without blocking single-payment runs."""
+
+    try:
+        environment = load_runtime_settings().current
+    except (FileNotFoundError, RuntimeError, ValueError):
+        yield None
+        return
+
+    if (
+        environment.name.value != "uat"
+        or environment.merchant.installment_api_key is None
+    ):
+        yield None
+        return
+
+    async with PaynkolayClient(environment) as client:
+        yield PaynkolayInstallmentProvider(client)
 
 
 def get_merchant_secret_key() -> SecretStr:

@@ -1,6 +1,10 @@
 """Typed payment payload models used by API clients and tests."""
 
 from paynkolay_pos.models.callbacks import CallbackPayload
+from paynkolay_pos.models.installments import (
+    PaynkolayInstallmentQuote,
+    PaynkolayInstallmentResponse,
+)
 from paynkolay_pos.models.payments import (
     Currency,
     PaymentCardInput,
@@ -30,6 +34,8 @@ __all__ = [
     "PaymentInitializeRequest",
     "PaymentInitializeResponse",
     "PaymentStatus",
+    "PaynkolayInstallmentQuote",
+    "PaynkolayInstallmentResponse",
     "PaynkolayCancelRefundResult",
     "PaynkolayCancelRefundType",
     "PaynkolayPaymentListResponse",

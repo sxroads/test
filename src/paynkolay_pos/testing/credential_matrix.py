@@ -53,6 +53,7 @@ class PaynkolayUATCredentialValues:
     """UAT credential values extracted from ignored Paynkolay artifacts."""
 
     payment_sx: str | None = None
+    installment_sx: str | None = None
     list_sx: str | None = None
     cancel_refund_sx: str | None = None
     secret_key: str | None = None
@@ -78,6 +79,7 @@ def extract_paynkolay_uat_values(
     *,
     postman_collection_path: Path | None = None,
     gateway_form_path: Path | None = None,
+    installment_service_path: Path | None = None,
 ) -> PaynkolayUATCredentialValues:
     """Extract UAT credential defaults from ignored Paynkolay/Postman files."""
 
@@ -91,8 +93,14 @@ def extract_paynkolay_uat_values(
         if gateway_form_path is not None and gateway_form_path.is_file()
         else {}
     )
+    installment_sx = (
+        _read_installment_service_sx(installment_service_path)
+        if installment_service_path is not None and installment_service_path.is_file()
+        else None
+    )
     return PaynkolayUATCredentialValues(
         payment_sx=_non_empty(postman_values.get("sx")),
+        installment_sx=installment_sx,
         list_sx=_non_empty(postman_values.get("sx-list")),
         cancel_refund_sx=_non_empty(postman_values.get("sx-cancel")),
         secret_key=_non_empty(postman_values.get("merchantSecretKey")),
@@ -218,12 +226,14 @@ def build_credential_runtime_config_payload(
     total_card_count: int | None = None,
     postman_collection_path: Path | None = None,
     gateway_form_path: Path | None = None,
+    installment_service_path: Path | None = None,
     active_environment: str = "dev",
     base_url: str = "https://local-mock.payments.invalid",
     callback_base_url: str = "https://local-mock.callbacks.invalid",
     merchant_id: str = "local-mock-merchant",
     terminal_id: str = "local-mock-terminal",
     api_key: str = "local-mock-payment-key",
+    installment_api_key: str = "local-mock-installment-key",
     list_api_key: str = "local-mock-list-key",
     cancel_refund_api_key: str = "local-mock-cancel-refund-key",
     secret_key: str = "local-mock-secret-key",
@@ -249,10 +259,15 @@ def build_credential_runtime_config_payload(
         uat_values = extract_paynkolay_uat_values(
             postman_collection_path=postman_collection_path,
             gateway_form_path=gateway_form_path,
+            installment_service_path=installment_service_path,
         )
         merchant_id = _fallback_placeholder(merchant_id, uat_values.merchant_id)
         terminal_id = _fallback_placeholder(terminal_id, uat_values.terminal_id)
         api_key = _fallback_placeholder(api_key, uat_values.payment_sx)
+        installment_api_key = _fallback_placeholder(
+            installment_api_key,
+            uat_values.installment_sx,
+        )
         list_api_key = _fallback_placeholder(list_api_key, uat_values.list_sx)
         cancel_refund_api_key = _fallback_placeholder(
             cancel_refund_api_key,
@@ -271,6 +286,7 @@ def build_credential_runtime_config_payload(
                     "merchant_id": merchant_id,
                     "terminal_id": terminal_id,
                     "api_key": api_key,
+                    "installment_api_key": installment_api_key,
                     "list_api_key": list_api_key,
                     "cancel_refund_api_key": cancel_refund_api_key,
                     "secret_key": secret_key,
@@ -290,12 +306,14 @@ def build_credential_runtime_config_json(
     total_card_count: int | None = None,
     postman_collection_path: Path | None = None,
     gateway_form_path: Path | None = None,
+    installment_service_path: Path | None = None,
     active_environment: str = "dev",
     base_url: str = "https://local-mock.payments.invalid",
     callback_base_url: str = "https://local-mock.callbacks.invalid",
     merchant_id: str = "local-mock-merchant",
     terminal_id: str = "local-mock-terminal",
     api_key: str = "local-mock-payment-key",
+    installment_api_key: str = "local-mock-installment-key",
     list_api_key: str = "local-mock-list-key",
     cancel_refund_api_key: str = "local-mock-cancel-refund-key",
     secret_key: str = "local-mock-secret-key",
@@ -308,12 +326,14 @@ def build_credential_runtime_config_json(
         total_card_count=total_card_count,
         postman_collection_path=postman_collection_path,
         gateway_form_path=gateway_form_path,
+        installment_service_path=installment_service_path,
         active_environment=active_environment,
         base_url=base_url,
         callback_base_url=callback_base_url,
         merchant_id=merchant_id,
         terminal_id=terminal_id,
         api_key=api_key,
+        installment_api_key=installment_api_key,
         list_api_key=list_api_key,
         cancel_refund_api_key=cancel_refund_api_key,
         secret_key=secret_key,
@@ -815,6 +835,14 @@ def _read_gateway_form_inputs(path: Path) -> dict[str, str]:
     parser = _HiddenInputParser()
     parser.feed(path.read_text(encoding="utf-8"))
     return parser.inputs
+
+
+def _read_installment_service_sx(path: Path) -> str | None:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition(":")
+        if separator and key.strip().lower() == "sx":
+            return _non_empty(value)
+    return None
 
 
 def _fallback_placeholder(current: str, extracted: str | None) -> str:

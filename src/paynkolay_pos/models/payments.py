@@ -85,6 +85,7 @@ class PaymentInitializeRequest(StrictPaymentModel):
     card: PaymentCardInput
     requires_3ds: bool
     installment_count: int = Field(default=1, ge=1, le=12)
+    installment_encoded_value: SecretStr | None = Field(default=None, min_length=1, repr=False)
     payment_channel: PaymentChannel = PaymentChannel.E_COMMERCE
     moto: bool = False
     correlation_id: str = Field(min_length=1, max_length=128)

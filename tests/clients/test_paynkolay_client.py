@@ -30,6 +30,7 @@ def valid_settings_payload() -> dict[str, object]:
                     "merchant_id": "merchant-dev",
                     "terminal_id": "terminal-dev",
                     "api_key": "api-key-dev",
+                    "installment_api_key": "installment-api-key-dev",
                     "list_api_key": "list-api-key-dev",
                     "secret_key": "secret-dev",
                 },
@@ -156,6 +157,57 @@ async def test_client_posts_multipart_form_data() -> None:
 
 @pytest.mark.api
 @pytest.mark.asyncio
+async def test_installment_lookup_uses_dedicated_sx_and_parses_quotes() -> None:
+    settings = RuntimeSettings.model_validate(valid_settings_payload())
+    captured_request: httpx.Request | None = None
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured_request
+        captured_request = request
+        return httpx.Response(
+            status_code=200,
+            json={
+                "PAYMENT_BANK_LIST": [
+                    {
+                        "INSTALLMENT_AMOUNT": 350.88,
+                        "INSTALLMENT": 3,
+                        "COMMISION_AMOUNT": 52.63,
+                        "COMMISION": 5,
+                        "TRANSACTION_AMOUNT": 1000,
+                        "AUTHORIZATION_AMOUNT": 1052.63,
+                        "EncodedValue": "opaque-provider-quote",
+                        "CURRENCY_CODE": "TRY",
+                    }
+                ],
+                "RESPONSE_DATA": "İşlem Başarılı.",
+                "RESPONSE_CODE": 2,
+            },
+        )
+
+    async with PaynkolayClient(
+        settings.current,
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        response = await client.get_installment_options(
+            amount="1000.00",
+            card_number=SecretStr("4111111111111111"),
+        )
+
+    assert response.successful is True
+    assert response.quotes[0].installment_count == 3
+    assert captured_request is not None
+    assert captured_request.url.path == "/Payment/PaymentInstallments"
+    assert b'installment-api-key-dev' in captured_request.content
+    assert b'name="amount"' in captured_request.content
+    assert b"1000.00" in captured_request.content
+    assert b'name="cardNumber"' in captured_request.content
+    assert b"4111111111111111" in captured_request.content
+    assert b'name="iscardvalid"' in captured_request.content
+    assert b"true" in captured_request.content
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
 async def test_initialize_payment_signs_request_and_parses_response() -> None:
     settings = RuntimeSettings.model_validate(valid_settings_payload())
     captured_payload: dict[str, object] | None = None
@@ -249,6 +301,45 @@ async def test_payment_form_payload_maps_internal_request_to_paynkolay_fields() 
         "currencyNumber": "949",
         "MerchantCustomerNo": "",
     }
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_payment_form_payload_includes_selected_installment_quote() -> None:
+    settings = RuntimeSettings.model_validate(valid_settings_payload())
+    payment_request = payment_initialize_request(
+        installment_count=3,
+        installment_encoded_value=SecretStr("opaque-provider-quote"),
+    )
+
+    async with PaynkolayClient(settings.current) as client:
+        payload = client.payment_form_payload(
+            payment_request,
+            success_url="https://merchant.example.test/success",
+            fail_url="https://merchant.example.test/fail",
+            card_holder_ip="185.125.190.58",
+            rnd="27-07-2026 10:30:00",
+        )
+
+    assert payload["installmentNo"] == "3"
+    assert payload["EncodedValue"] == "opaque-provider-quote"
+
+
+@pytest.mark.negative
+@pytest.mark.asyncio
+async def test_payment_form_payload_requires_quote_for_installments() -> None:
+    settings = RuntimeSettings.model_validate(valid_settings_payload())
+    payment_request = payment_initialize_request(installment_count=3)
+
+    async with PaynkolayClient(settings.current) as client:
+        with pytest.raises(ValueError, match="installment encoded value is required"):
+            client.payment_form_payload(
+                payment_request,
+                success_url="https://merchant.example.test/success",
+                fail_url="https://merchant.example.test/fail",
+                card_holder_ip="185.125.190.58",
+                rnd="27-07-2026 10:30:00",
+            )
 
 
 @pytest.mark.negative

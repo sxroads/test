@@ -9,6 +9,7 @@
         "merchant_id": "replace-with-dev-merchant-id",
         "terminal_id": "replace-with-dev-terminal-id",
         "api_key": "replace-with-dev-payment-sx",
+        "installment_api_key": "replace-with-dev-installment-sx",
         "list_api_key": "replace-with-dev-list-sx",
         "cancel_refund_api_key": "replace-with-dev-cancel-refund-sx-if-different",
         "secret_key": "replace-with-dev-merchant-secret-key"
@@ -123,6 +124,7 @@
         "merchant_id": "replace-with-uat-merchant-id",
         "terminal_id": "replace-with-uat-terminal-id",
         "api_key": "replace-with-uat-payment-sx",
+        "installment_api_key": "replace-with-uat-installment-sx",
         "list_api_key": "replace-with-uat-list-sx",
         "cancel_refund_api_key": "replace-with-uat-cancel-refund-sx-if-different",
         "secret_key": "replace-with-uat-merchant-secret-key"
@@ -157,6 +159,7 @@
         "merchant_id": "replace-with-test-merchant-id",
         "terminal_id": "replace-with-test-terminal-id",
         "api_key": "replace-with-test-payment-sx",
+        "installment_api_key": "replace-with-test-installment-sx",
         "list_api_key": "replace-with-test-list-sx",
         "cancel_refund_api_key": "replace-with-test-cancel-refund-sx-if-different",
         "secret_key": "replace-with-test-merchant-secret-key"

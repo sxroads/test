@@ -43,6 +43,7 @@ class MerchantProfile(StrictConfigModel):
     merchant_id: str = Field(min_length=1)
     terminal_id: str = Field(min_length=1)
     api_key: SecretStr = Field(min_length=1)
+    installment_api_key: SecretStr | None = Field(default=None, min_length=1)
     list_api_key: SecretStr | None = Field(default=None, min_length=1)
     cancel_refund_api_key: SecretStr | None = Field(default=None, min_length=1)
     secret_key: SecretStr = Field(min_length=1)

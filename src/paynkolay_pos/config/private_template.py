@@ -119,6 +119,7 @@ def _environment_payload(
             "merchant_id": f"replace-with-{name}-merchant-id",
             "terminal_id": f"replace-with-{name}-terminal-id",
             "api_key": f"replace-with-{name}-payment-sx",
+            "installment_api_key": f"replace-with-{name}-installment-sx",
             "list_api_key": f"replace-with-{name}-list-sx",
             "cancel_refund_api_key": f"replace-with-{name}-cancel-refund-sx-if-different",
             "secret_key": f"replace-with-{name}-merchant-secret-key",

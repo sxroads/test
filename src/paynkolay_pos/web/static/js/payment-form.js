@@ -23,6 +23,7 @@
   const requires3dsInput = document.getElementById("requires-3ds");
   const threeDsModeOptions = Array.from(document.querySelectorAll("[id^='three-ds-mode-']"));
   let installmentTimer = null;
+  let installmentRequestSequence = 0;
   let selectedNewCardFlow = "moto";
   let selectedThreeDsMode = "manual";
   let availableCards = [];
@@ -132,7 +133,7 @@
 
   function formPayload() {
     const data = new FormData(form);
-    return {
+    const payload = {
       amount: data.get("amount"),
       currency: data.get("currency"),
       card_brand: data.get("card_brand"),
@@ -145,6 +146,12 @@
       installment_count: Number(data.get("installment_count")),
       auto_complete_3ds: selectedThreeDsMode === "auto",
     };
+    const selectedInstallment = installmentSelect.selectedOptions[0];
+    const encodedValue = selectedInstallment?.dataset.encodedValue || "";
+    if (encodedValue) {
+      payload.installment_encoded_value = encodedValue;
+    }
+    return payload;
   }
 
   function showCardList() {
@@ -266,8 +273,10 @@
   }
 
   function setDefaultInstallments() {
+    installmentRequestSequence += 1;
     const option = document.createElement("option");
     option.value = "1";
+    option.dataset.encodedValue = "";
     option.textContent = "Tek cekim";
     installmentSelect.replaceChildren(option);
     installmentSelect.value = "1";
@@ -279,6 +288,7 @@
       ...response.options.map((option) => {
         const element = document.createElement("option");
         element.value = String(option.installment_count);
+        element.dataset.encodedValue = option.encoded_value || "";
         element.textContent =
           option.installment_count === 1
             ? `${option.label} (${option.total_amount})`
@@ -299,7 +309,13 @@
     }, 350);
   }
 
+  function resetAndScheduleInstallmentRefresh() {
+    setDefaultInstallments();
+    scheduleInstallmentRefresh();
+  }
+
   async function refreshInstallments() {
+    const requestSequence = ++installmentRequestSequence;
     const payload = installmentPayload();
     if (!hasInstallmentInputs(payload)) {
       setDefaultInstallments();
@@ -308,8 +324,14 @@
     installmentStatus.textContent = "Loading installment options";
     try {
       const response = await window.PaynkolayApi.getInstallmentOptions(payload);
+      if (requestSequence !== installmentRequestSequence) {
+        return;
+      }
       renderInstallmentOptions(response);
     } catch (error) {
+      if (requestSequence !== installmentRequestSequence) {
+        return;
+      }
       setDefaultInstallments();
       installmentStatus.textContent = error.message;
     }
@@ -480,8 +502,8 @@
     document.getElementById("card-number"),
     requires3dsInput,
   ].forEach((element) => {
-    element.addEventListener("input", scheduleInstallmentRefresh);
-    element.addEventListener("change", scheduleInstallmentRefresh);
+    element.addEventListener("input", resetAndScheduleInstallmentRefresh);
+    element.addEventListener("change", resetAndScheduleInstallmentRefresh);
   });
 
   [

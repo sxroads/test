@@ -139,13 +139,16 @@ class InstallmentOption(BaseModel):
     label: str
     total_amount: str
     monthly_amount: str
+    commission_amount: str = "0.00"
+    commission_rate: str = "0.00"
+    encoded_value: str | None = Field(default=None, repr=False)
 
 
 class InstallmentOptionsResponse(BaseModel):
     """Installment options for a card/amount pair."""
 
     default_installment: int = 1
-    source: Literal["local_stub"]
+    source: Literal["local_stub", "paynkolay_uat"]
     options: list[InstallmentOption]
 
 
@@ -249,6 +252,12 @@ class PaymentFormRequest(BaseModel):
     cvv: SecretStr = Field(min_length=3, max_length=4)
     requires_3ds: bool = True
     installment_count: int = Field(default=1, ge=1, le=12)
+    installment_encoded_value: SecretStr | None = Field(
+        default=None,
+        min_length=1,
+        max_length=4096,
+        repr=False,
+    )
     auto_complete_3ds: bool = False
 
     @field_validator("amount")

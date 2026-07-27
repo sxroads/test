@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote
 
@@ -19,6 +19,7 @@ from paynkolay_pos.models import (
     PaymentInitializeResponse,
     PaynkolayCancelRefundResult,
     PaynkolayCancelRefundType,
+    PaynkolayInstallmentResponse,
     PaynkolayPaymentListResponse,
     TransactionStatusResponse,
 )
@@ -31,6 +32,7 @@ from paynkolay_pos.security import (
 )
 
 PAYNKOLAY_PAYMENT_PATH = "/v1/Payment"
+PAYNKOLAY_INSTALLMENTS_PATH = "/Payment/PaymentInstallments"
 PAYNKOLAY_PAYMENT_LIST_PATH = "/Payment/PaymentList"
 PAYNKOLAY_CANCEL_REFUND_PATH = "/v1/CancelRefundPayment"
 
@@ -184,6 +186,10 @@ class PaynkolayClient:
             raise ValueError("card_holder_ip must not be empty")
         if not rnd.strip():
             raise ValueError("rnd must not be empty")
+        if request.installment_count > 1 and request.installment_encoded_value is None:
+            raise ValueError(
+                "provider installment encoded value is required for installment payments"
+            )
 
         sx = self._environment.merchant.api_key
         merchant_secret_key = self._environment.merchant.secret_key
@@ -217,7 +223,60 @@ class PaynkolayClient:
             "environment": environment,
             "currencyNumber": PAYNKOLAY_CURRENCY_NUMBERS[request.currency],
             "MerchantCustomerNo": merchant_customer_no,
+            **(
+                {
+                    "EncodedValue": (
+                        request.installment_encoded_value.get_secret_value()
+                    )
+                }
+                if request.installment_encoded_value is not None
+                else {}
+            ),
         }
+
+    def installment_form_payload(
+        self,
+        *,
+        amount: Decimal | str,
+        card_number: SecretStr | str,
+        is_card_valid: bool = True,
+    ) -> dict[str, str]:
+        """Build Paynkolay installment lookup multipart fields."""
+
+        installment_sx = self._environment.merchant.installment_api_key
+        if installment_sx is None:
+            raise ValueError("installment API key is not configured")
+
+        canonical_amount = _canonical_amount(amount)
+        pan = _secret_value(card_number).strip()
+        if not pan.isdigit() or len(pan) not in {8, *range(12, 20)}:
+            raise ValueError("installment card number must be an 8-digit BIN or full PAN")
+        if is_card_valid and len(pan) < 12:
+            raise ValueError("full card PAN is required when is_card_valid is true")
+
+        return {
+            "sx": installment_sx.get_secret_value(),
+            "amount": canonical_amount,
+            "cardNumber": pan,
+            "iscardvalid": _bool_value(is_card_valid),
+        }
+
+    async def get_installment_options(
+        self,
+        *,
+        amount: Decimal | str,
+        card_number: SecretStr | str,
+        is_card_valid: bool = True,
+    ) -> PaynkolayInstallmentResponse:
+        """Fetch card/amount-specific installment quotes from Paynkolay."""
+
+        payload = self.installment_form_payload(
+            amount=amount,
+            card_number=card_number,
+            is_card_valid=is_card_valid,
+        )
+        response_payload = await self.post_form(PAYNKOLAY_INSTALLMENTS_PATH, payload)
+        return PaynkolayInstallmentResponse.model_validate(response_payload)
 
     async def initialize_payment_form(
         self,
@@ -455,6 +514,16 @@ def _form_value(value: object) -> str:
     if isinstance(value, bool):
         return _bool_value(value)
     return str(value)
+
+
+def _canonical_amount(value: Decimal | str) -> str:
+    try:
+        amount = Decimal(str(value)).quantize(Decimal("0.01"))
+    except InvalidOperation as exc:
+        raise ValueError("amount must be a valid decimal") from exc
+    if amount <= 0:
+        raise ValueError("amount must be greater than zero")
+    return f"{amount:.2f}"
 
 
 def _secret_value(value: SecretStr | str) -> str:

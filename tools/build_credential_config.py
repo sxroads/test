@@ -61,9 +61,16 @@ def main() -> None:
         default=Path("credentials/base64.md"),
         help="Ignored 3DS gateway form sample used to auto-fill UAT merchant/client id candidates.",
     )
+    parser.add_argument(
+        "--installment-service-file",
+        type=Path,
+        default=Path("credentials/installment/servisler.md"),
+        help="Ignored installment service note used to auto-fill its dedicated UAT sx.",
+    )
     parser.add_argument("--merchant-id", default="local-mock-merchant")
     parser.add_argument("--terminal-id", default="local-mock-terminal")
     parser.add_argument("--api-key", default="local-mock-payment-key")
+    parser.add_argument("--installment-api-key", default="local-mock-installment-key")
     parser.add_argument("--list-api-key", default="local-mock-list-key")
     parser.add_argument("--cancel-refund-api-key", default="local-mock-cancel-refund-key")
     parser.add_argument("--secret-key", default="local-mock-secret-key")
@@ -76,12 +83,14 @@ def main() -> None:
         total_card_count=args.total_card_count,
         postman_collection_path=args.postman_collection,
         gateway_form_path=args.gateway_form,
+        installment_service_path=args.installment_service_file,
         active_environment=args.environment,
         base_url=args.base_url,
         callback_base_url=args.callback_base_url,
         merchant_id=args.merchant_id,
         terminal_id=args.terminal_id,
         api_key=args.api_key,
+        installment_api_key=args.installment_api_key,
         list_api_key=args.list_api_key,
         cancel_refund_api_key=args.cancel_refund_api_key,
         secret_key=args.secret_key,

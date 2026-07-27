@@ -22,6 +22,7 @@ UAT_CALLBACK_BASE_URL ?= https://paynkolay.com.tr/test/callback
 UAT_MERCHANT_ID ?= replace-with-uat-merchant-id
 UAT_TERMINAL_ID ?= replace-with-uat-terminal-id
 UAT_PAYMENT_SX ?= replace-with-uat-payment-sx
+UAT_INSTALLMENT_SX ?= replace-with-uat-installment-sx
 UAT_LIST_SX ?= replace-with-uat-list-sx
 UAT_CANCEL_REFUND_SX ?= replace-with-uat-cancel-refund-sx
 UAT_SECRET_KEY ?= replace-with-uat-secret-key
@@ -189,7 +190,7 @@ credential-config:
 	poetry run python tools/build_credential_config.py --output $(CREDENTIAL_CONFIG_OUT)
 
 uat-config:
-	poetry run python tools/build_credential_config.py --environment uat --total-card-count $(UAT_CARD_COUNT) --base-url https://paynkolaytest.nkolayislem.com.tr/Vpos --callback-base-url $(UAT_CALLBACK_BASE_URL) --merchant-id $(UAT_MERCHANT_ID) --terminal-id $(UAT_TERMINAL_ID) --api-key $(UAT_PAYMENT_SX) --list-api-key $(UAT_LIST_SX) --cancel-refund-api-key $(UAT_CANCEL_REFUND_SX) --secret-key $(UAT_SECRET_KEY) --postman-collection credentials/paynkolay.postman_collection.json --gateway-form credentials/base64.md --output $(UAT_CONFIG_OUT)
+	poetry run python tools/build_credential_config.py --environment uat --total-card-count $(UAT_CARD_COUNT) --base-url https://paynkolaytest.nkolayislem.com.tr/Vpos --callback-base-url $(UAT_CALLBACK_BASE_URL) --merchant-id $(UAT_MERCHANT_ID) --terminal-id $(UAT_TERMINAL_ID) --api-key $(UAT_PAYMENT_SX) --installment-api-key $(UAT_INSTALLMENT_SX) --list-api-key $(UAT_LIST_SX) --cancel-refund-api-key $(UAT_CANCEL_REFUND_SX) --secret-key $(UAT_SECRET_KEY) --postman-collection credentials/paynkolay.postman_collection.json --gateway-form credentials/base64.md --installment-service-file credentials/installment/servisler.md --output $(UAT_CONFIG_OUT)
 
 credential-scenarios:
 	poetry run python tools/build_credential_scenarios.py --output $(CREDENTIAL_SCENARIO_OUT)

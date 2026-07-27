@@ -291,6 +291,7 @@ def test_build_credential_runtime_config_can_target_uat(tmp_path: Path) -> None:
             merchant_id="uat-merchant",
             terminal_id="uat-terminal",
             api_key="uat-payment-sx",
+            installment_api_key="uat-installment-sx",
             list_api_key="uat-list-sx",
             cancel_refund_api_key="uat-cancel-sx",
             secret_key="uat-secret",
@@ -302,6 +303,11 @@ def test_build_credential_runtime_config_can_target_uat(tmp_path: Path) -> None:
     assert settings.current.base_url == "https://paynkolaytest.nkolayislem.com.tr/Vpos"
     assert settings.current.callback_base_url == "https://internal.example.com/paynkolay"
     assert settings.current.merchant.api_key.get_secret_value() == "uat-payment-sx"
+    assert settings.current.merchant.installment_api_key is not None
+    assert (
+        settings.current.merchant.installment_api_key.get_secret_value()
+        == "uat-installment-sx"
+    )
     assert settings.current.merchant.list_api_key is not None
     assert settings.current.merchant.list_api_key.get_secret_value() == "uat-list-sx"
     assert settings.current.merchant.cancel_refund_api_key is not None
@@ -343,13 +349,22 @@ def test_extract_paynkolay_uat_values_reads_postman_and_gateway_form(
         """,
         encoding="utf-8",
     )
+    installment_service = tmp_path / "servisler.md"
+    installment_service.write_text(
+        "https://provider.example.test/PaymentInstallments\n"
+        "sx:installment-sx\n"
+        "amount:1000.00\n",
+        encoding="utf-8",
+    )
 
     values = extract_paynkolay_uat_values(
         postman_collection_path=postman,
         gateway_form_path=gateway_form,
+        installment_service_path=installment_service,
     )
 
     assert values.payment_sx == "payment-sx"
+    assert values.installment_sx == "installment-sx"
     assert values.list_sx == "list-sx"
     assert values.cancel_refund_sx == "cancel-sx"
     assert values.secret_key == "secret"
@@ -394,18 +409,22 @@ def test_build_credential_runtime_config_auto_fills_uat_placeholders(
         """,
         encoding="utf-8",
     )
+    installment_service = tmp_path / "servisler.md"
+    installment_service.write_text("sx:installment-sx\n", encoding="utf-8")
 
     settings = RuntimeSettings.model_validate(
         build_credential_runtime_config_payload(
             paynkolay_cards_path=paynkolay_cards,
             postman_collection_path=postman,
             gateway_form_path=gateway_form,
+            installment_service_path=installment_service,
             active_environment="uat",
             base_url="https://paynkolaytest.nkolayislem.com.tr/Vpos",
             callback_base_url="https://internal.example.com/paynkolay",
             merchant_id="replace-with-uat-merchant-id",
             terminal_id="replace-with-uat-terminal-id",
             api_key="replace-with-uat-payment-sx",
+            installment_api_key="replace-with-uat-installment-sx",
             list_api_key="replace-with-uat-list-sx",
             cancel_refund_api_key="replace-with-uat-cancel-refund-sx",
             secret_key="replace-with-uat-secret-key",
@@ -415,6 +434,11 @@ def test_build_credential_runtime_config_auto_fills_uat_placeholders(
     assert settings.current.merchant.merchant_id == "6420371466"
     assert settings.current.merchant.terminal_id == "190000300"
     assert settings.current.merchant.api_key.get_secret_value() == "payment-sx"
+    assert settings.current.merchant.installment_api_key is not None
+    assert (
+        settings.current.merchant.installment_api_key.get_secret_value()
+        == "installment-sx"
+    )
     assert settings.current.merchant.list_api_key is not None
     assert settings.current.merchant.list_api_key.get_secret_value() == "list-sx"
     assert settings.current.merchant.cancel_refund_api_key is not None

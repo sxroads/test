@@ -151,6 +151,7 @@ class PaynkolayPaymentInitializer:
             ),
             requires_3ds=request.requires_3ds,
             installment_count=request.installment_count,
+            installment_encoded_value=request.installment_encoded_value,
             correlation_id=f"web-{order_id}",
         )
 
