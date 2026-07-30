@@ -30,7 +30,10 @@ from paynkolay_pos.api.payment_initializer import (
 )
 from paynkolay_pos.api.routes import parallel_runs, reports
 from paynkolay_pos.api.schemas import PaymentFormRequest
-from paynkolay_pos.config import build_private_runtime_config_payload
+from paynkolay_pos.config import (
+    build_private_runtime_config_payload,
+    load_runtime_settings,
+)
 from paynkolay_pos.models import (
     Currency,
     PaymentCardInput,
@@ -499,6 +502,9 @@ async def test_settings_page_renders_dynamic_config_screen(client: httpx.AsyncCl
     assert 'id="runtime-status"' in response.text
     assert 'id="settings-cards"' in response.text
     assert 'id="coverage-3ds"' in response.text
+    assert 'id="merchant-settings-form"' in response.text
+    assert 'id="merchant-no"' in response.text
+    assert 'id="payment-sx"' in response.text
     assert "make credential-inputs" in response.text
     assert "/static/js/settings.js" in response.text
 
@@ -2570,6 +2576,265 @@ async def test_config_overview_exposes_safe_runtime_metadata(
         "diagnostic_class": "unknown",
         "automatic_success_candidate": True,
     }
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_merchant_settings_update_is_persisted_without_exposing_sx(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "settings.json"
+    config_payload = build_private_runtime_config_payload(card_count=10)
+    environments = cast(dict[str, Any], config_payload["environments"])
+    dev = cast(dict[str, Any], environments["dev"])
+    merchant = cast(dict[str, Any], dev["merchant"])
+    merchant.update(
+        {
+            "merchant_id": "400000001",
+            "terminal_id": "terminal-original",
+            "api_key": "payment-sx-original",
+            "installment_api_key": "installment-sx-original",
+            "list_api_key": "list-sx-original",
+            "cancel_refund_api_key": "cancel-sx-original",
+            "secret_key": "merchant-secret-original",
+        }
+    )
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    monkeypatch.setenv("PAYNKOLAY_CONFIG_FILE", str(config_path))
+
+    initial_response = await client.get("/api/config/merchant")
+
+    assert initial_response.status_code == 200
+    assert initial_response.json() == {
+        "environment": "dev",
+        "merchant_no": "400000001",
+        "payment_sx_configured": True,
+        "message": None,
+    }
+    assert "payment-sx-original" not in initial_response.text
+
+    update_response = await client.patch(
+        "/api/config/merchant",
+        json={
+            "environment": "dev",
+            "merchant_no": "400009999",
+            "payment_sx": "payment-sx-replacement",
+        },
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "environment": "dev",
+        "merchant_no": "400009999",
+        "payment_sx_configured": True,
+        "message": "Merchant settings saved for new payment runs.",
+    }
+    assert "payment-sx-replacement" not in update_response.text
+
+    settings = load_runtime_settings()
+    assert settings.current.merchant.merchant_id == "400009999"
+    assert (
+        settings.current.merchant.api_key.get_secret_value()
+        == "payment-sx-replacement"
+    )
+    assert settings.current.merchant.terminal_id == "terminal-original"
+    assert settings.current.merchant.installment_api_key is not None
+    assert (
+        settings.current.merchant.installment_api_key.get_secret_value()
+        == "installment-sx-original"
+    )
+    assert settings.current.merchant.list_api_key is not None
+    assert (
+        settings.current.merchant.list_api_key.get_secret_value()
+        == "list-sx-original"
+    )
+    assert settings.current.merchant.cancel_refund_api_key is not None
+    assert (
+        settings.current.merchant.cancel_refund_api_key.get_secret_value()
+        == "cancel-sx-original"
+    )
+    assert (
+        settings.current.merchant.secret_key.get_secret_value()
+        == "merchant-secret-original"
+    )
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_merchant_settings_update_preserves_sx_when_omitted(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "settings.json"
+    config_payload = build_private_runtime_config_payload(card_count=10)
+    environments = cast(dict[str, Any], config_payload["environments"])
+    dev = cast(dict[str, Any], environments["dev"])
+    merchant = cast(dict[str, Any], dev["merchant"])
+    merchant["merchant_id"] = "400000001"
+    merchant["api_key"] = "payment-sx-preserved"
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    monkeypatch.setenv("PAYNKOLAY_CONFIG_FILE", str(config_path))
+
+    response = await client.patch(
+        "/api/config/merchant",
+        json={"environment": "dev", "merchant_no": "400009999"},
+    )
+
+    assert response.status_code == 200
+    settings = load_runtime_settings()
+    assert settings.current.merchant.merchant_id == "400009999"
+    assert (
+        settings.current.merchant.api_key.get_secret_value()
+        == "payment-sx-preserved"
+    )
+    assert "payment-sx-preserved" not in response.text
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_merchant_settings_rejects_stale_environment_and_invalid_merchant(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "settings.json"
+    config_payload = build_private_runtime_config_payload(card_count=10)
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    monkeypatch.setenv("PAYNKOLAY_CONFIG_FILE", str(config_path))
+
+    stale_response = await client.patch(
+        "/api/config/merchant",
+        json={
+            "environment": "uat",
+            "merchant_no": "400009999",
+            "payment_sx": "must-not-be-written",
+        },
+    )
+    invalid_response = await client.patch(
+        "/api/config/merchant",
+        json={"environment": "dev", "merchant_no": "merchant-not-numeric"},
+    )
+
+    assert stale_response.status_code == 409
+    assert invalid_response.status_code == 422
+    settings = load_runtime_settings()
+    assert settings.current.merchant.merchant_id == "replace-with-dev-merchant-id"
+    assert "must-not-be-written" not in config_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_merchant_settings_rejects_invalid_sx_without_echoing_it(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "settings.json"
+    config_payload = build_private_runtime_config_payload(card_count=10)
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    monkeypatch.setenv("PAYNKOLAY_CONFIG_FILE", str(config_path))
+    oversized_sx = "private-sx-" + ("x" * 4096)
+
+    response = await client.patch(
+        "/api/config/merchant",
+        json={
+            "environment": "dev",
+            "merchant_no": "400009999",
+            "payment_sx": oversized_sx,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "payment_sx must contain between 1 and 4096 characters"
+    )
+    assert oversized_sx not in response.text
+    assert oversized_sx not in config_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_merchant_settings_config_errors_do_not_expose_existing_secrets(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "settings.json"
+    config_payload = build_private_runtime_config_payload(card_count=10)
+    environments = cast(dict[str, Any], config_payload["environments"])
+    dev = cast(dict[str, Any], environments["dev"])
+    merchant = cast(dict[str, Any], dev["merchant"])
+    merchant["api_key"] = "private-existing-payment-sx"
+    cards = cast(list[dict[str, Any]], dev["cards"])
+    cards[1]["alias"] = cards[0]["alias"]
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    monkeypatch.setenv("PAYNKOLAY_CONFIG_FILE", str(config_path))
+
+    get_response = await client.get("/api/config/merchant")
+    patch_response = await client.patch(
+        "/api/config/merchant",
+        json={"environment": "dev", "merchant_no": "400009999"},
+    )
+
+    assert get_response.status_code == 503
+    assert patch_response.status_code == 503
+    assert get_response.json()["detail"] == (
+        "runtime merchant configuration is unavailable"
+    )
+    assert patch_response.json()["detail"] == (
+        "runtime merchant configuration could not be saved"
+    )
+    assert "private-existing-payment-sx" not in get_response.text
+    assert "private-existing-payment-sx" not in patch_response.text
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_merchant_and_card_updates_do_not_overwrite_each_other(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "settings.json"
+    config_payload = build_private_runtime_config_payload(card_count=10)
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    monkeypatch.setenv("PAYNKOLAY_CONFIG_FILE", str(config_path))
+
+    merchant_response, card_response = await asyncio.gather(
+        client.patch(
+            "/api/config/merchant",
+            json={
+                "environment": "dev",
+                "merchant_no": "400009999",
+                "payment_sx": "concurrent-payment-sx",
+            },
+        ),
+        client.post(
+            "/api/cards",
+            json={
+                "alias": "concurrent_moto_card",
+                "brand": "visa",
+                "card_number": "4111111111111234",
+                "expiry_month": 10,
+                "expiry_year": 2030,
+                "cvv": "321",
+                "flow_type": "moto",
+            },
+        ),
+    )
+
+    assert merchant_response.status_code == 200
+    assert card_response.status_code == 201
+    settings = load_runtime_settings()
+    assert settings.current.merchant.merchant_id == "400009999"
+    assert (
+        settings.current.merchant.api_key.get_secret_value()
+        == "concurrent-payment-sx"
+    )
+    assert settings.current.cards[-1].alias == "concurrent_moto_card"
 
 
 @pytest.mark.api

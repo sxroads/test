@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import ValidationError
 
+from paynkolay_pos.api.runtime_config_store import mutate_runtime_config
 from paynkolay_pos.api.schemas import (
     TestCardCreateRequest,
     TestCardFormFill,
     TestCardListResponse,
 )
-from paynkolay_pos.config import RuntimeSettings, TestCard, load_runtime_settings
+from paynkolay_pos.config import TestCard, load_runtime_settings
 from paynkolay_pos.testing.card_behaviors import behavior_for_alias
 
 router = APIRouter(prefix="/api/cards", tags=["cards"])
-CONFIG_FILE_ENV = "PAYNKOLAY_CONFIG_FILE"
 
 
 @router.get("", response_model=TestCardListResponse)
@@ -47,62 +45,42 @@ async def list_test_cards() -> TestCardListResponse:
 async def create_test_card(request: TestCardCreateRequest) -> TestCardFormFill:
     """Append a UI-created test card to the active runtime configuration file."""
 
-    config_path = _runtime_config_path()
+    card_payload = _runtime_card_payload(request)
+
+    def append_card(payload: dict[str, object], current_environment: str) -> None:
+        environment_payload = _active_environment_payload(payload, current_environment)
+        cards = environment_payload.setdefault("cards", [])
+        if not isinstance(cards, list):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="active runtime environment cards must be a list",
+            )
+        if any(
+            isinstance(card, dict) and card.get("alias") == request.alias
+            for card in cards
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"card alias already exists: {request.alias}",
+            )
+        cards.append(card_payload)
+
     try:
-        payload = json.loads(config_path.read_text(encoding="utf-8"))
-        settings = RuntimeSettings.model_validate(payload)
-    except (OSError, json.JSONDecodeError, ValidationError, ValueError) as exc:
+        await mutate_runtime_config(append_card)
+    except HTTPException:
+        raise
+    except (FileNotFoundError, RuntimeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"runtime payment configuration is unavailable: {exc}",
         ) from exc
-
-    current_environment = settings.current.name.value
-    if any(card.alias == request.alias for card in settings.current.cards):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"card alias already exists: {request.alias}",
-        )
-
-    card_payload = _runtime_card_payload(request)
-    environment_payload = _active_environment_payload(payload, current_environment)
-    cards = environment_payload.setdefault("cards", [])
-    if not isinstance(cards, list):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="active runtime environment cards must be a list",
-        )
-    cards.append(card_payload)
-
-    try:
-        RuntimeSettings.model_validate(payload)
-        config_path.write_text(
-            f"{json.dumps(payload, indent=2, ensure_ascii=False)}\n",
-            encoding="utf-8",
-        )
-    except (OSError, ValidationError, ValueError) as exc:
+    except (OSError, json.JSONDecodeError, ValidationError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"card could not be saved: {exc}",
         ) from exc
 
     return _form_fill_from_card(TestCard.model_validate(card_payload))
-
-
-def _runtime_config_path() -> Path:
-    config_path_value = os.getenv(CONFIG_FILE_ENV)
-    if not config_path_value:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"{CONFIG_FILE_ENV} must point to a configuration JSON file",
-        )
-    config_path = Path(config_path_value).expanduser()
-    if not config_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"configuration file does not exist: {config_path}",
-        )
-    return config_path
 
 
 def _active_environment_payload(

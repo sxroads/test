@@ -24,6 +24,15 @@
     getConfigOverview() {
       return requestJson("/api/config/overview");
     },
+    getMerchantSettings() {
+      return requestJson("/api/config/merchant");
+    },
+    updateMerchantSettings(payload) {
+      return requestJson("/api/config/merchant", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+    },
     getCards() {
       return requestJson("/api/cards");
     },

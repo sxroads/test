@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections import Counter
+from typing import Any, cast
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
+from pydantic import ValidationError
 
+from paynkolay_pos.api.runtime_config_store import mutate_runtime_config
 from paynkolay_pos.api.schemas import (
     ConfigCardSummary,
     ConfigMerchantSummary,
@@ -16,6 +20,8 @@ from paynkolay_pos.api.schemas import (
     ConfigResponse,
     ConfigScenarioCoverage,
     ConfigScenarioSummary,
+    MerchantSettingsResponse,
+    MerchantSettingsUpdateRequest,
 )
 from paynkolay_pos.config import CardBrand, TestCard, load_runtime_settings
 from paynkolay_pos.models import Currency, PaymentChannel
@@ -119,6 +125,82 @@ async def get_config_overview() -> ConfigOverviewResponse:
     )
 
 
+@router.get("/merchant", response_model=MerchantSettingsResponse)
+async def get_merchant_settings() -> MerchantSettingsResponse:
+    """Return editable merchant metadata without exposing payment SX."""
+
+    try:
+        current = load_runtime_settings().current
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="runtime merchant configuration is unavailable",
+        ) from exc
+
+    return MerchantSettingsResponse(
+        environment=current.name.value,
+        merchant_no=current.merchant.merchant_id,
+        payment_sx_configured=bool(
+            current.merchant.api_key.get_secret_value().strip()
+        ),
+    )
+
+
+@router.patch("/merchant", response_model=MerchantSettingsResponse)
+async def update_merchant_settings(
+    request: MerchantSettingsUpdateRequest,
+) -> MerchantSettingsResponse:
+    """Update active merchant/payment SX values in the private runtime config."""
+
+    payment_sx = (
+        request.payment_sx.get_secret_value()
+        if request.payment_sx is not None
+        else None
+    )
+    if payment_sx is not None and not 1 <= len(payment_sx) <= 4096:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="payment_sx must contain between 1 and 4096 characters",
+        )
+
+    def update(payload: dict[str, object], active_environment: str) -> None:
+        if request.environment != active_environment:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "active environment changed; refresh Settings before saving "
+                    f"(expected {request.environment}, active {active_environment})"
+                ),
+            )
+        environment_payload = _active_environment_payload(payload, active_environment)
+        merchant_payload = environment_payload.get("merchant")
+        if not isinstance(merchant_payload, dict):
+            raise ValueError("active runtime environment merchant must be an object")
+        merchant_payload["merchant_id"] = request.merchant_no
+        if payment_sx is not None:
+            merchant_payload["api_key"] = payment_sx
+
+    try:
+        await mutate_runtime_config(update)
+        current = load_runtime_settings().current
+    except HTTPException:
+        raise
+    except (OSError, json.JSONDecodeError, ValidationError, ValueError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="runtime merchant configuration could not be saved",
+        ) from exc
+
+    return MerchantSettingsResponse(
+        environment=current.name.value,
+        merchant_no=current.merchant.merchant_id,
+        payment_sx_configured=bool(
+            current.merchant.api_key.get_secret_value().strip()
+        ),
+        message="Merchant settings saved for new payment runs.",
+    )
+
+
 def _card_summary(card: TestCard) -> ConfigCardSummary:
     behavior = behavior_for_alias(card.alias)
     return ConfigCardSummary(
@@ -208,3 +290,18 @@ def _mask_value(value: str) -> str:
     if len(value) <= 4:
         return "*" * len(value)
     return f"{value[:2]}{'*' * max(len(value) - 4, 4)}{value[-2:]}"
+
+
+def _active_environment_payload(
+    payload: dict[str, object],
+    current_environment: str,
+) -> dict[str, Any]:
+    environments = payload.get("environments")
+    if not isinstance(environments, dict):
+        raise ValueError("runtime configuration environments must be an object")
+    environment_payload = environments.get(current_environment)
+    if not isinstance(environment_payload, dict):
+        raise ValueError(
+            f"active environment is missing from runtime config: {current_environment}"
+        )
+    return cast(dict[str, Any], environment_payload)

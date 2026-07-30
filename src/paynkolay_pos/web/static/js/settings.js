@@ -6,6 +6,14 @@
   const issueList = document.getElementById("settings-issues");
   const cardTable = document.getElementById("settings-cards");
   const message = document.getElementById("settings-message");
+  const merchantForm = document.getElementById("merchant-settings-form");
+  const merchantNo = document.getElementById("merchant-no");
+  const paymentSx = document.getElementById("payment-sx");
+  const paymentSxHint = document.getElementById("payment-sx-hint");
+  const merchantSave = document.getElementById("merchant-settings-save");
+  const merchantStatus = document.getElementById("merchant-settings-status");
+  const merchantMessage = document.getElementById("merchant-settings-message");
+  let merchantEnvironment = null;
 
   const fields = {
     environment: document.getElementById("settings-environment"),
@@ -175,11 +183,74 @@
       : "Review readiness issues before running sandbox or local scenario checks.";
   }
 
-  window.PaynkolayApi.getConfigOverview()
-    .then(renderOverview)
-    .catch((error) => {
-      setStatus(runtimeStatus, "Error", "error");
-      setStatus(readinessStatus, "Error", "error");
-      message.textContent = error.message;
-    });
+  function renderMerchantSettings(settings) {
+    merchantEnvironment = settings.environment;
+    merchantNo.value = settings.merchant_no;
+    paymentSx.value = "";
+    paymentSxHint.textContent = settings.payment_sx_configured
+      ? "Payment SX is configured. Enter a new value only to replace it."
+      : "Payment SX is not configured. Enter a value before running payments.";
+    setStatus(
+      merchantStatus,
+      settings.payment_sx_configured ? "Configured" : "Needs input",
+      settings.payment_sx_configured ? "success" : "error",
+    );
+    if (settings.message) {
+      merchantMessage.textContent = settings.message;
+    }
+  }
+
+  async function loadSettings() {
+    const overview = await window.PaynkolayApi.getConfigOverview();
+    renderOverview(overview);
+    try {
+      renderMerchantSettings(await window.PaynkolayApi.getMerchantSettings());
+    } catch (error) {
+      merchantEnvironment = null;
+      merchantNo.value = "";
+      paymentSx.value = "";
+      merchantSave.disabled = true;
+      setStatus(merchantStatus, "Unavailable", "error");
+      merchantMessage.textContent = error.message;
+    }
+  }
+
+  merchantForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!merchantEnvironment) {
+      merchantMessage.textContent = "Runtime merchant settings are not loaded.";
+      return;
+    }
+
+    merchantSave.disabled = true;
+    setStatus(merchantStatus, "Saving", "neutral");
+    merchantMessage.textContent = "Saving merchant settings for new payment runs.";
+    const payload = {
+      environment: merchantEnvironment,
+      merchant_no: merchantNo.value,
+    };
+    if (paymentSx.value) {
+      payload.payment_sx = paymentSx.value;
+    }
+
+    try {
+      const updated = await window.PaynkolayApi.updateMerchantSettings(payload);
+      renderMerchantSettings(updated);
+      renderOverview(await window.PaynkolayApi.getConfigOverview());
+    } catch (error) {
+      setStatus(merchantStatus, "Error", "error");
+      merchantMessage.textContent = error.message;
+    } finally {
+      paymentSx.value = "";
+      merchantSave.disabled = false;
+    }
+  });
+
+  loadSettings().catch((error) => {
+    setStatus(runtimeStatus, "Error", "error");
+    setStatus(readinessStatus, "Error", "error");
+    setStatus(merchantStatus, "Error", "error");
+    message.textContent = error.message;
+    merchantMessage.textContent = error.message;
+  });
 })();

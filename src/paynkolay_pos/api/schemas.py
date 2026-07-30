@@ -180,6 +180,25 @@ class ConfigMerchantSummary(BaseModel):
     has_cancel_refund_key: bool
 
 
+class MerchantSettingsResponse(BaseModel):
+    """Editable merchant metadata that never returns the configured SX value."""
+
+    environment: str
+    merchant_no: str
+    payment_sx_configured: bool
+    message: str | None = None
+
+
+class MerchantSettingsUpdateRequest(BaseModel):
+    """Safe browser request for updating active payment credentials."""
+
+    model_config = {"str_strip_whitespace": True}
+
+    environment: str = Field(min_length=1, max_length=16)
+    merchant_no: str = Field(min_length=1, max_length=32, pattern=r"^\d+$")
+    payment_sx: SecretStr | None = Field(default=None, repr=False)
+
+
 class ConfigScenarioCoverage(BaseModel):
     """Aggregate scenario coverage counts safe for browser display."""
 

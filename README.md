@@ -40,12 +40,29 @@ The web UI is split into four practical areas:
   PaymentList result, and authorization evidence.
 - **Parallel**: multi-card parallel test execution with manual or random card selection and
   one run-level installment count.
-- **Settings**: runtime environment and configured card overview.
+- **Settings**: runtime environment, editable merchant/payment SX settings, and configured
+  card overview.
 - **Reports**: Allure status, latest test run summary, credential report execution, and
   saved parallel evidence.
 
 The Payment and Settings screens are intentionally kept operational and compact. Parallel
 and Reports are wider and easier to scan for business-facing review sessions.
+
+### Runtime Merchant Settings
+
+The Settings screen can update the active environment's merchant number and primary
+Payment/Sales `sx` without changing tracked source files. The merchant number is visible;
+the current SX is never returned to the browser. Leaving the password field empty preserves
+the configured SX, while entering a value replaces it for new payment runs.
+
+Updates are serialized, validated against the complete runtime settings model, and written
+atomically to the private file selected by `PAYNKOLAY_CONFIG_FILE`. Existing parallel runs
+keep their credential snapshot. Running `make uat-web` again rebuilds that generated file
+from ignored credential inputs and restores their defaults.
+
+The dedicated installment, PaymentList, and cancel/refund SX values are not changed by this
+form. Keep the merchant secret and operation-specific SX values aligned with the selected
+merchant. Do not expose this unauthenticated local tester UI on a public network.
 
 ## 3D Secure Automation
 

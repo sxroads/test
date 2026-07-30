@@ -58,7 +58,11 @@
     loading_options: "Loading installment options", runtime_config_not_loaded: "Runtime config not loaded", config_unavailable: "Config unavailable",
     remove: "Remove", selection_updated: "Selection updated.", starting: "Starting parallel run",
     manual_limit: "Manual selection can include at most 150 test items.", report_check: "Checking report status",
-    loading_evidence: "Loading evidence", view: "View"
+    loading_evidence: "Loading evidence", view: "View",
+    merchant_credentials: "Merchant Credentials", merchant_no: "Merchant No",
+    merchant_no_hint: "Used for the active merchant context.", payment_sx: "Payment SX",
+    payment_sx_placeholder: "Configured — enter a new value to replace",
+    save_merchant: "Save merchant"
   });
   Object.assign(translations.tr, {
     config: "Yapılandırma", expiry: "Son kullanma", save_card: "Kartı kaydet", cards_not_loaded: "Kartlar yüklenemedi.", amount: "Tutar",
@@ -68,7 +72,11 @@
     loading_options: "Taksit seçenekleri yükleniyor", runtime_config_not_loaded: "Çalışma zamanı yapılandırması yüklenmedi", config_unavailable: "Yapılandırmaya ulaşılamıyor",
     remove: "Kaldır", selection_updated: "Seçim güncellendi.", starting: "Paralel test başlatılıyor",
     manual_limit: "Manuel seçim en fazla 150 test içerebilir.", report_check: "Rapor durumu kontrol ediliyor",
-    loading_evidence: "Kanıt yükleniyor", view: "Görüntüle"
+    loading_evidence: "Kanıt yükleniyor", view: "Görüntüle",
+    merchant_credentials: "Üye İşyeri Bilgileri", merchant_no: "Üye İşyeri No",
+    merchant_no_hint: "Aktif üye işyeri bağlamında kullanılır.", payment_sx: "Ödeme SX",
+    payment_sx_placeholder: "Yapılandırıldı — değiştirmek için yeni değer girin",
+    save_merchant: "Üye işyerini kaydet"
   });
 
   const language = localStorage.getItem("paynkolay-language") || "en";

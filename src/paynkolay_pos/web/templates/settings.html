@@ -6,9 +6,9 @@
     <title>Settings</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/css/app.css">
-    <script src="/static/js/i18n.js?v=language-fix-1" defer></script>
-    <script src="/static/js/api-client.js" defer></script>
-    <script src="/static/js/settings.js" defer></script>
+    <script src="/static/js/i18n.js?v=merchant-settings-1" defer></script>
+    <script src="/static/js/api-client.js?v=merchant-settings-1" defer></script>
+    <script src="/static/js/settings.js?v=merchant-settings-1" defer></script>
   </head>
   <body>
     <div class="shell">
@@ -84,6 +84,47 @@
           </dl>
           <ul class="issue-list" id="settings-issues"></ul>
         </aside>
+
+        <section class="panel settings-wide" aria-labelledby="merchant-settings-title">
+          <div class="panel-heading">
+            <h2 id="merchant-settings-title" data-i18n="merchant_credentials">Merchant Credentials</h2>
+            <span class="status-pill neutral" id="merchant-settings-status">Loading</span>
+          </div>
+          <form class="payment-form merchant-settings-form" id="merchant-settings-form" autocomplete="off">
+            <label class="field">
+              <span data-i18n="merchant_no">Merchant No</span>
+              <input
+                id="merchant-no"
+                name="merchant_no"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]+"
+                maxlength="32"
+                required
+              >
+              <small class="field-hint" data-i18n="merchant_no_hint">Used for the active merchant context.</small>
+            </label>
+            <label class="field">
+              <span data-i18n="payment_sx">Payment SX</span>
+              <input
+                id="payment-sx"
+                name="payment_sx"
+                type="password"
+                maxlength="4096"
+                autocomplete="new-password"
+                data-i18n-placeholder="payment_sx_placeholder"
+                placeholder="Configured — enter a new value to replace"
+              >
+              <small class="field-hint" id="payment-sx-hint">SX value is never returned to the browser.</small>
+            </label>
+            <div class="actions">
+              <button id="merchant-settings-save" type="submit" data-i18n="save_merchant">Save merchant</button>
+            </div>
+          </form>
+          <p class="inline-message" id="merchant-settings-message">
+            Changes apply to new payment runs. Restarting with make uat-web restores generated defaults.
+          </p>
+        </section>
 
         <section class="panel settings-wide" aria-labelledby="handoff-title">
           <div class="panel-heading">
