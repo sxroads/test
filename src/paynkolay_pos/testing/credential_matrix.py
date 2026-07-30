@@ -55,8 +55,10 @@ class PaynkolayUATCredentialValues:
     payment_sx: str | None = None
     installment_sx: str | None = None
     list_sx: str | None = None
+    postman_list_sx: str | None = None
     cancel_refund_sx: str | None = None
     secret_key: str | None = None
+    postman_secret_key: str | None = None
     merchant_id: str | None = None
     terminal_id: str | None = None
 
@@ -101,12 +103,17 @@ def extract_paynkolay_uat_values(
     return PaynkolayUATCredentialValues(
         payment_sx=_non_empty(postman_values.get("sx")),
         installment_sx=_non_empty(installment_values.get("sx")),
-        list_sx=_non_empty(postman_values.get("sx-list")),
+        list_sx=(
+            _non_empty(installment_values.get("paymentlistsx"))
+            or _non_empty(installment_values.get("sx"))
+        ),
+        postman_list_sx=_non_empty(postman_values.get("sx-list")),
         cancel_refund_sx=_non_empty(postman_values.get("sx-cancel")),
         secret_key=(
             _non_empty(installment_values.get("merchantsecretkey"))
             or _non_empty(postman_values.get("merchantSecretKey"))
         ),
+        postman_secret_key=_non_empty(postman_values.get("merchantSecretKey")),
         merchant_id=_non_empty(gateway_values.get("SUBMERCHANTID")),
         terminal_id=_non_empty(gateway_values.get("clientid")),
     )
@@ -266,20 +273,43 @@ def build_credential_runtime_config_payload(
         )
         merchant_id = _fallback_placeholder(merchant_id, uat_values.merchant_id)
         terminal_id = _fallback_placeholder(terminal_id, uat_values.terminal_id)
+        use_postman_273_credentials = merchant_id == "400000273"
         api_key = _fallback_placeholder(
             api_key,
-            uat_values.installment_sx or uat_values.payment_sx,
+            (
+                uat_values.payment_sx
+                if use_postman_273_credentials
+                else uat_values.installment_sx or uat_values.payment_sx
+            ),
         )
         installment_api_key = _fallback_placeholder(
             installment_api_key,
-            uat_values.installment_sx,
+            (
+                uat_values.payment_sx
+                if use_postman_273_credentials
+                else uat_values.installment_sx
+            ),
         )
-        list_api_key = api_key
+        list_api_key = _fallback_placeholder(
+            list_api_key,
+            (
+                uat_values.postman_list_sx
+                if use_postman_273_credentials
+                else uat_values.list_sx
+            ),
+        )
         cancel_refund_api_key = _fallback_placeholder(
             cancel_refund_api_key,
             uat_values.cancel_refund_sx,
         )
-        secret_key = _fallback_placeholder(secret_key, uat_values.secret_key)
+        secret_key = _fallback_placeholder(
+            secret_key,
+            (
+                uat_values.postman_secret_key
+                if use_postman_273_credentials
+                else uat_values.secret_key
+            ),
+        )
 
     payload: dict[str, object] = {
         "active_environment": normalized_environment,

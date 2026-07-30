@@ -417,14 +417,14 @@ async def test_payment_list_form_payload_builds_paynkolay_status_query_fields() 
         )
 
     expected_hash = generate_payment_list_hash(
-        sx=settings.current.merchant.api_key,
+        sx=SecretStr("list-api-key-dev"),
         start_date="01.07.2026",
         end_date="31.07.2026",
         client_ref_code="order-1001",
         merchant_secret_key=settings.current.merchant.secret_key,
     )
     assert payload == {
-        "sx": "api-key-dev",
+        "sx": "list-api-key-dev",
         "startDate": "01.07.2026",
         "endDate": "31.07.2026",
         "clientRefCode": "order-1001",

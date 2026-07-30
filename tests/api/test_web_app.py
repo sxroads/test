@@ -2648,7 +2648,7 @@ async def test_merchant_settings_update_is_persisted_without_exposing_sx(
     assert settings.current.merchant.list_api_key is not None
     assert (
         settings.current.merchant.list_api_key.get_secret_value()
-        == "payment-sx-replacement"
+        == "list-sx-original"
     )
     assert settings.current.merchant.cancel_refund_api_key is not None
     assert (
@@ -2842,7 +2842,7 @@ async def test_merchant_and_card_updates_do_not_overwrite_each_other(
     assert settings.current.merchant.list_api_key is not None
     assert (
         settings.current.merchant.list_api_key.get_secret_value()
-        == "concurrent-payment-sx"
+        == "replace-with-dev-list-sx"
     )
     assert settings.current.cards[-1].alias == "concurrent_moto_card"
 

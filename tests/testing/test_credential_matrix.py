@@ -309,7 +309,7 @@ def test_build_credential_runtime_config_can_target_uat(tmp_path: Path) -> None:
         == "uat-installment-sx"
     )
     assert settings.current.merchant.list_api_key is not None
-    assert settings.current.merchant.list_api_key.get_secret_value() == "uat-payment-sx"
+    assert settings.current.merchant.list_api_key.get_secret_value() == "uat-list-sx"
     assert settings.current.merchant.cancel_refund_api_key is not None
     assert (
         settings.current.merchant.cancel_refund_api_key.get_secret_value()
@@ -353,6 +353,7 @@ def test_extract_paynkolay_uat_values_reads_postman_and_gateway_form(
     installment_service.write_text(
         "https://provider.example.test/PaymentInstallments\n"
         "sx:installment-sx\n"
+        "paymentListSx:private-list-sx\n"
         "merchantSecretKey:installment-secret\n"
         "amount:1000.00\n",
         encoding="utf-8",
@@ -366,9 +367,11 @@ def test_extract_paynkolay_uat_values_reads_postman_and_gateway_form(
 
     assert values.payment_sx == "payment-sx"
     assert values.installment_sx == "installment-sx"
-    assert values.list_sx == "list-sx"
+    assert values.list_sx == "private-list-sx"
+    assert values.postman_list_sx == "list-sx"
     assert values.cancel_refund_sx == "cancel-sx"
     assert values.secret_key == "installment-secret"
+    assert values.postman_secret_key == "secret"
     assert values.merchant_id == "6420371466"
     assert values.terminal_id == "190000300"
 
@@ -412,7 +415,9 @@ def test_build_credential_runtime_config_auto_fills_uat_placeholders(
     )
     installment_service = tmp_path / "servisler.md"
     installment_service.write_text(
-        "sx:installment-sx\nmerchantSecretKey:installment-secret\n",
+        "sx:installment-sx\n"
+        "paymentListSx:private-list-sx\n"
+        "merchantSecretKey:installment-secret\n",
         encoding="utf-8",
     )
 
@@ -444,7 +449,7 @@ def test_build_credential_runtime_config_auto_fills_uat_placeholders(
         == "installment-sx"
     )
     assert settings.current.merchant.list_api_key is not None
-    assert settings.current.merchant.list_api_key.get_secret_value() == "installment-sx"
+    assert settings.current.merchant.list_api_key.get_secret_value() == "private-list-sx"
     assert settings.current.merchant.cancel_refund_api_key is not None
     assert (
         settings.current.merchant.cancel_refund_api_key.get_secret_value()
@@ -454,6 +459,36 @@ def test_build_credential_runtime_config_auto_fills_uat_placeholders(
         settings.current.merchant.secret_key.get_secret_value()
         == "installment-secret"
     )
+
+    settings_273 = RuntimeSettings.model_validate(
+        build_credential_runtime_config_payload(
+            paynkolay_cards_path=paynkolay_cards,
+            postman_collection_path=postman,
+            gateway_form_path=gateway_form,
+            installment_service_path=installment_service,
+            active_environment="uat",
+            base_url="https://paynkolaytest.nkolayislem.com.tr/Vpos",
+            callback_base_url="https://internal.example.com/paynkolay",
+            merchant_id="400000273",
+            terminal_id="replace-with-uat-terminal-id",
+            api_key="replace-with-uat-payment-sx",
+            installment_api_key="replace-with-uat-installment-sx",
+            list_api_key="replace-with-uat-list-sx",
+            cancel_refund_api_key="replace-with-uat-cancel-refund-sx",
+            secret_key="replace-with-uat-secret-key",
+        )
+    )
+
+    assert settings_273.current.merchant.merchant_id == "400000273"
+    assert settings_273.current.merchant.api_key.get_secret_value() == "payment-sx"
+    assert settings_273.current.merchant.installment_api_key is not None
+    assert (
+        settings_273.current.merchant.installment_api_key.get_secret_value()
+        == "payment-sx"
+    )
+    assert settings_273.current.merchant.list_api_key is not None
+    assert settings_273.current.merchant.list_api_key.get_secret_value() == "list-sx"
+    assert settings_273.current.merchant.secret_key.get_secret_value() == "secret"
 
 
 def test_build_credential_runtime_config_keeps_explicit_uat_values(
