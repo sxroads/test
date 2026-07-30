@@ -349,6 +349,11 @@ async def _auto_complete_three_ds_session(
         )
     elif session.payment_list_status is not None:
         await session_store.update_status(order_id, PaymentSessionStatus.STATUS_VERIFIED)
+    elif session.payment_list_error is not None and result.returned_to_callback:
+        await session_store.update_status(
+            order_id,
+            PaymentSessionStatus.SUCCESS_RETURNED,
+        )
 
 
 def _configured_otp_for_request(request: PaymentFormRequest) -> SecretStr | None:

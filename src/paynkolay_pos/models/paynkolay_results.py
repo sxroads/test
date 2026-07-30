@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, tzinfo
 from decimal import Decimal
 from enum import StrEnum
@@ -346,13 +347,19 @@ class PaynkolayPaymentListResponse(PaynkolayProviderModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_flat_provider_response(cls, payload: object) -> object:
-        """Accept both the documented result envelope and the live flat response."""
+        """Accept documented, flat, and JSON-string live result envelopes."""
 
-        if (
-            isinstance(payload, dict)
-            and "result" not in payload
-            and "RESPONSE_CODE" in payload
-        ):
+        if not isinstance(payload, dict):
+            return payload
+        result = payload.get("result")
+        if isinstance(result, str):
+            try:
+                decoded_result = json.loads(result)
+            except json.JSONDecodeError:
+                return payload
+            if isinstance(decoded_result, dict):
+                return {**payload, "result": decoded_result}
+        if "result" not in payload and "RESPONSE_CODE" in payload:
             return {**payload, "result": payload}
         return payload
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -348,6 +349,25 @@ def test_payment_list_response_accepts_flat_live_provider_payload() -> None:
             "RESPONSE_DATA": "Islem basarili",
             "LIST": [payment_list_row_payload()],
             "TimeStamp": None,
+        }
+    )
+
+    assert response.result.successful is True
+    assert response.rows_for_client_ref("order-1001")[0].reference_code == "IKSIRPF102168"
+
+
+@pytest.mark.api
+def test_payment_list_response_accepts_json_string_result_envelope() -> None:
+    response = PaynkolayPaymentListResponse.model_validate(
+        {
+            "id": "",
+            "result": json.dumps(
+                {
+                    "RESPONSE_CODE": "2",
+                    "RESPONSE_DATA": "Islem basarili",
+                    "LIST": [payment_list_row_payload()],
+                }
+            ),
         }
     )
 

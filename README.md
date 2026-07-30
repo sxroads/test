@@ -60,9 +60,10 @@ atomically to the private file selected by `PAYNKOLAY_CONFIG_FILE`. Existing par
 keep their credential snapshot. Running `make uat-web` again rebuilds that generated file
 from ignored credential inputs and restores their defaults.
 
-The dedicated installment, PaymentList, and cancel/refund SX values are not changed by this
-form. Keep the merchant secret and operation-specific SX values aligned with the selected
-merchant. Do not expose this unauthenticated local tester UI on a public network.
+PaymentList uses the same SX as Payment/Sales. Updating Payment SX from Settings therefore
+updates both new payment requests and PaymentList verification requests. The dedicated
+installment value remains private runtime input. Cancel/refund is outside the current
+delivery scope. Do not expose this unauthenticated local tester UI on a public network.
 
 ## 3D Secure Automation
 

@@ -2648,7 +2648,7 @@ async def test_merchant_settings_update_is_persisted_without_exposing_sx(
     assert settings.current.merchant.list_api_key is not None
     assert (
         settings.current.merchant.list_api_key.get_secret_value()
-        == "list-sx-original"
+        == "payment-sx-replacement"
     )
     assert settings.current.merchant.cancel_refund_api_key is not None
     assert (
@@ -2689,6 +2689,11 @@ async def test_merchant_settings_update_preserves_sx_when_omitted(
     assert (
         settings.current.merchant.api_key.get_secret_value()
         == "payment-sx-preserved"
+    )
+    assert settings.current.merchant.list_api_key is not None
+    assert (
+        settings.current.merchant.list_api_key.get_secret_value()
+        == "replace-with-dev-list-sx"
     )
     assert "payment-sx-preserved" not in response.text
 
@@ -2832,6 +2837,11 @@ async def test_merchant_and_card_updates_do_not_overwrite_each_other(
     assert settings.current.merchant.merchant_id == "400009999"
     assert (
         settings.current.merchant.api_key.get_secret_value()
+        == "concurrent-payment-sx"
+    )
+    assert settings.current.merchant.list_api_key is not None
+    assert (
+        settings.current.merchant.list_api_key.get_secret_value()
         == "concurrent-payment-sx"
     )
     assert settings.current.cards[-1].alias == "concurrent_moto_card"
@@ -3044,6 +3054,88 @@ async def test_payment_form_retries_payment_list_after_auto_3ds_submit(
     assert payload["payment_list"]["error"] is None
     assert fake_initializer.status_calls == ["order-auto-3ds-retry", "order-auto-3ds-retry"]
     assert sleep_calls == [2.0]
+
+
+@pytest.mark.api
+@pytest.mark.asyncio
+async def test_payment_form_reports_success_return_when_payment_list_is_unavailable(
+    fake_automator: FakeThreeDSAutomator,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    async def no_wait(_: float) -> None:
+        return None
+
+    monkeypatch.setattr(payment_list_retry, "async_sleep", no_wait)
+    _write_parallel_runtime_config(
+        monkeypatch,
+        tmp_path,
+        [
+            _runtime_card(
+                alias="ui_3ds_static",
+                pan="4111111111111111",
+                requires_3ds=True,
+                expected_otp="123456",
+            ),
+        ],
+    )
+    fake_automator.result = AcsBrowserAutomationResult(
+        completed=True,
+        submitted=True,
+        returned_to_callback=True,
+        reason="otp_submitted",
+        screen_classification="static_config_otp",
+        otp_resolution={
+            "status": "ready",
+            "source_type": "static_config",
+            "otp_present": True,
+            "should_auto_submit": True,
+            "reason": "resolved OTP from configured test card metadata",
+        },
+    )
+    verification_error = PaymentProviderStatusVerificationError(
+        "provider payment status verification failed"
+    )
+    fake_initializer = FakePaymentInitializer(
+        status_outcomes=[verification_error] * 4,
+    )
+    app = create_app()
+    app.dependency_overrides[get_payment_initializer] = lambda: fake_initializer
+    app.dependency_overrides[get_three_ds_automator] = lambda: fake_automator
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/payments",
+            json={
+                "order_id": "order-auto-3ds-list-unavailable",
+                "amount": "100.00",
+                "currency": "TRY",
+                "card_number": "4111111111111111",
+                "card_holder": "PAYNKOLAY TEST",
+                "expiry_month": 12,
+                "expiry_year": 2030,
+                "cvv": "123",
+                "requires_3ds": True,
+                "installment_count": 1,
+                "auto_complete_3ds": True,
+            },
+        )
+        lookup_response = await client.get(
+            "/api/payments/order-auto-3ds-list-unavailable"
+        )
+
+    assert response.status_code == 202
+    payload = lookup_response.json()
+    assert payload["status"] == "success_returned"
+    assert payload["payment_list"]["status"] is None
+    assert (
+        payload["payment_list"]["error"]
+        == "provider payment status verification failed"
+    )
+    assert payload["three_ds_automation"]["submitted"] is True
+    assert fake_initializer.status_calls == [
+        "order-auto-3ds-list-unavailable"
+    ] * 4
 
 
 @pytest.mark.api

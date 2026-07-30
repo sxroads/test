@@ -317,7 +317,7 @@ class PaynkolayClient:
         if not end_date.strip():
             raise ValueError("end_date must not be empty")
 
-        sx = self._environment.merchant.list_api_key or self._environment.merchant.api_key
+        sx = self._environment.merchant.api_key
         merchant_secret_key = self._environment.merchant.secret_key
         hash_data_v2 = generate_payment_list_hash(
             sx=sx,

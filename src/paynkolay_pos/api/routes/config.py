@@ -179,6 +179,7 @@ async def update_merchant_settings(
         merchant_payload["merchant_id"] = request.merchant_no
         if payment_sx is not None:
             merchant_payload["api_key"] = payment_sx
+            merchant_payload["list_api_key"] = payment_sx
 
     try:
         await mutate_runtime_config(update)

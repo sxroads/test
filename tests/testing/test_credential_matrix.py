@@ -309,7 +309,7 @@ def test_build_credential_runtime_config_can_target_uat(tmp_path: Path) -> None:
         == "uat-installment-sx"
     )
     assert settings.current.merchant.list_api_key is not None
-    assert settings.current.merchant.list_api_key.get_secret_value() == "uat-list-sx"
+    assert settings.current.merchant.list_api_key.get_secret_value() == "uat-payment-sx"
     assert settings.current.merchant.cancel_refund_api_key is not None
     assert (
         settings.current.merchant.cancel_refund_api_key.get_secret_value()
@@ -353,6 +353,7 @@ def test_extract_paynkolay_uat_values_reads_postman_and_gateway_form(
     installment_service.write_text(
         "https://provider.example.test/PaymentInstallments\n"
         "sx:installment-sx\n"
+        "merchantSecretKey:installment-secret\n"
         "amount:1000.00\n",
         encoding="utf-8",
     )
@@ -367,7 +368,7 @@ def test_extract_paynkolay_uat_values_reads_postman_and_gateway_form(
     assert values.installment_sx == "installment-sx"
     assert values.list_sx == "list-sx"
     assert values.cancel_refund_sx == "cancel-sx"
-    assert values.secret_key == "secret"
+    assert values.secret_key == "installment-secret"
     assert values.merchant_id == "6420371466"
     assert values.terminal_id == "190000300"
 
@@ -410,7 +411,10 @@ def test_build_credential_runtime_config_auto_fills_uat_placeholders(
         encoding="utf-8",
     )
     installment_service = tmp_path / "servisler.md"
-    installment_service.write_text("sx:installment-sx\n", encoding="utf-8")
+    installment_service.write_text(
+        "sx:installment-sx\nmerchantSecretKey:installment-secret\n",
+        encoding="utf-8",
+    )
 
     settings = RuntimeSettings.model_validate(
         build_credential_runtime_config_payload(
@@ -433,20 +437,23 @@ def test_build_credential_runtime_config_auto_fills_uat_placeholders(
 
     assert settings.current.merchant.merchant_id == "6420371466"
     assert settings.current.merchant.terminal_id == "190000300"
-    assert settings.current.merchant.api_key.get_secret_value() == "payment-sx"
+    assert settings.current.merchant.api_key.get_secret_value() == "installment-sx"
     assert settings.current.merchant.installment_api_key is not None
     assert (
         settings.current.merchant.installment_api_key.get_secret_value()
         == "installment-sx"
     )
     assert settings.current.merchant.list_api_key is not None
-    assert settings.current.merchant.list_api_key.get_secret_value() == "list-sx"
+    assert settings.current.merchant.list_api_key.get_secret_value() == "installment-sx"
     assert settings.current.merchant.cancel_refund_api_key is not None
     assert (
         settings.current.merchant.cancel_refund_api_key.get_secret_value()
         == "cancel-sx"
     )
-    assert settings.current.merchant.secret_key.get_secret_value() == "secret"
+    assert (
+        settings.current.merchant.secret_key.get_secret_value()
+        == "installment-secret"
+    )
 
 
 def test_build_credential_runtime_config_keeps_explicit_uat_values(

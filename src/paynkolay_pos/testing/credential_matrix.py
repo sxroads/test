@@ -93,17 +93,20 @@ def extract_paynkolay_uat_values(
         if gateway_form_path is not None and gateway_form_path.is_file()
         else {}
     )
-    installment_sx = (
-        _read_installment_service_sx(installment_service_path)
+    installment_values = (
+        _read_installment_service_values(installment_service_path)
         if installment_service_path is not None and installment_service_path.is_file()
-        else None
+        else {}
     )
     return PaynkolayUATCredentialValues(
         payment_sx=_non_empty(postman_values.get("sx")),
-        installment_sx=installment_sx,
+        installment_sx=_non_empty(installment_values.get("sx")),
         list_sx=_non_empty(postman_values.get("sx-list")),
         cancel_refund_sx=_non_empty(postman_values.get("sx-cancel")),
-        secret_key=_non_empty(postman_values.get("merchantSecretKey")),
+        secret_key=(
+            _non_empty(installment_values.get("merchantsecretkey"))
+            or _non_empty(postman_values.get("merchantSecretKey"))
+        ),
         merchant_id=_non_empty(gateway_values.get("SUBMERCHANTID")),
         terminal_id=_non_empty(gateway_values.get("clientid")),
     )
@@ -263,12 +266,15 @@ def build_credential_runtime_config_payload(
         )
         merchant_id = _fallback_placeholder(merchant_id, uat_values.merchant_id)
         terminal_id = _fallback_placeholder(terminal_id, uat_values.terminal_id)
-        api_key = _fallback_placeholder(api_key, uat_values.payment_sx)
+        api_key = _fallback_placeholder(
+            api_key,
+            uat_values.installment_sx or uat_values.payment_sx,
+        )
         installment_api_key = _fallback_placeholder(
             installment_api_key,
             uat_values.installment_sx,
         )
-        list_api_key = _fallback_placeholder(list_api_key, uat_values.list_sx)
+        list_api_key = api_key
         cancel_refund_api_key = _fallback_placeholder(
             cancel_refund_api_key,
             uat_values.cancel_refund_sx,
@@ -837,12 +843,14 @@ def _read_gateway_form_inputs(path: Path) -> dict[str, str]:
     return parser.inputs
 
 
-def _read_installment_service_sx(path: Path) -> str | None:
+def _read_installment_service_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         key, separator, value = line.partition(":")
-        if separator and key.strip().lower() == "sx":
-            return _non_empty(value)
-    return None
+        normalized_value = _non_empty(value)
+        if separator and normalized_value is not None:
+            values.setdefault(key.strip().lower(), normalized_value)
+    return values
 
 
 def _fallback_placeholder(current: str, extracted: str | None) -> str:

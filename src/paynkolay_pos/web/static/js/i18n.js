@@ -126,6 +126,7 @@
     payment_list_missing: "PaymentList bulunamadı", awaiting_provider_finalization: "Sağlayıcı tamamlaması bekleniyor",
     provider_failed: "Sağlayıcı hatası", blank_or_redirect_error: "Boş sayfa veya yönlendirme hatası",
     failed: "Başarısız", running: "Çalışıyor", pending: "Bekliyor", pending_3ds: "3DS bekleniyor",
+    success_returned: "Başarı callback’ine döndü (PaymentList doğrulanamadı)",
     "Parallel run completed.": "Paralel test tamamlandı.",
     "Parallel run completed with failures.": "Paralel test hatalarla tamamlandı.",
     "provider payment status verification failed": "Sağlayıcı ödeme durumu doğrulanamadı"
