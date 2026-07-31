@@ -10,7 +10,7 @@ reports/
 .vscode/
 dist/
 build/
-guide
+
 
 # Private Paynkolay runtime configs; keep checked-in templates.
 paynkolay-settings.json
