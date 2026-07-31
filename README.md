@@ -269,3 +269,6 @@ Private runtime files are expected under ignored locations such as `credentials/
 
 The project is a test automation and validation framework. It is not a production payment
 gateway and should only be used with approved test/UAT credentials and cards.
+
+
+PAYNKOLAY_3DS_AUTOMATION_HEADED_FALLBACK=0 \ make uat-web WEB_PORT=8001 WEB_RELOAD=--reload \ WEB_3DS_HEADED=0 WEB_3DS_CLOSE_DELAY=0
