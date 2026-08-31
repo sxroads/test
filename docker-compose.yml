@@ -1,0 +1,10 @@
+services:
+  paynkolay-pos:
+    image: paynkolay-pos:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - PAYNKOLAY_CONFIG_FILE=/app/config/settings.json
+      - PAYNKOLAY_ENV=test
+    volumes:
+      - ./credentials:/app/config
