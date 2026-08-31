@@ -1,5 +1,6 @@
 services:
   paynkolay-pos:
+    build: .
     image: paynkolay-pos:latest
     ports:
       - "8000:8000"
