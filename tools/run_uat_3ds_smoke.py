@@ -652,7 +652,7 @@ def _payment_request_for(
             "expiry_month": card.expiry_month,
             "expiry_year": card.expiry_year,
             "cvv": card.cvv.get_secret_value(),
-            "card_holder": card_holder or "PAYNKOLAY TEST",
+            "card_holder": card_holder or "TEST-AUTOMATION",
         },
         order_id=order_id,
         correlation_id=f"uat-3ds-{uuid4().hex}",

@@ -24,7 +24,7 @@ def payment_session() -> PaymentSession:
         amount=Decimal("100.00"),
         currency=Currency.TRY,
         masked_pan="411111******1111",
-        card_holder="PAYNKOLAY TEST",
+        card_holder="TEST-AUTOMATION",
         requires_3ds=True,
         installment_count=1,
         created_at=datetime(2026, 7, 7, 12, 0, tzinfo=UTC),

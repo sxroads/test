@@ -49,7 +49,7 @@ src/paynkolay_pos/
 
 Confirmed end to end in UAT:
 
-- Payment request sent to Paynkolay test environment.
+- Payment request sent to TEST-AUTOMATION environment.
 - Bank response returned `Approved`.
 - Paynkolay response returned `RESPONSE_CODE=2`.
 - PaymentList returned final `captured` status.

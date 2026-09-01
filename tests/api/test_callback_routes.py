@@ -108,7 +108,7 @@ async def _seed_session(
         amount=Decimal("1.00"),
         currency=Currency.TRY,
         pan="4111111111111111",
-        card_holder="PAYNKOLAY TEST",
+        card_holder="TEST-AUTOMATION",
         requires_3ds=True,
         installment_count=1,
     )

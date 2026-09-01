@@ -141,7 +141,7 @@ def payment_form_request() -> PaymentFormRequest:
             "currency": "TRY",
             "card_brand": "visa",
             "card_number": "4111111111111111",
-            "card_holder": "PAYNKOLAY TEST",
+            "card_holder": "TEST-AUTOMATION",
             "expiry_month": 12,
             "expiry_year": 2030,
             "cvv": "123",

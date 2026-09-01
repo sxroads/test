@@ -47,7 +47,7 @@ class TestCardFormFill(BaseModel):
     cvv: str
     expiry_month: int
     expiry_year: int
-    card_holder: str = "PAYNKOLAY TEST"
+    card_holder: str = "TEST-AUTOMATION"
     requires_3ds: bool
     has_expected_otp: bool
     automation_status: Literal[

@@ -204,7 +204,7 @@ def payment_list_row_payload(**overrides: object) -> dict[str, object]:
         "STATUS": "SUCCESS",
         "TRANSACTION_TYPE": "SALES",
         "TRX_DATE": "03.07.2026 09:45:00",
-        "CARD_HOLDER_NAME": "PAYNKOLAY TEST",
+        "CARD_HOLDER_NAME": "TEST-AUTOMATION",
         "IS_3D": True,
         "INSTALLMENT_COUNT": "1",
         "DESCRIPTION": "",

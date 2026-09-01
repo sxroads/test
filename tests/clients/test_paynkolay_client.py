@@ -248,7 +248,7 @@ async def test_initialize_payment_signs_request_and_parses_response() -> None:
         "expiry_month": 12,
         "expiry_year": 2030,
         "cvv": "123",
-        "card_holder": "PAYNKOLAY TEST",
+        "card_holder": "TEST-AUTOMATION",
     }
     assert captured_payload["installment_count"] == 1
     assert captured_payload["payment_channel"] == "e_commerce"
@@ -287,7 +287,7 @@ async def test_payment_form_payload_maps_internal_request_to_paynkolay_fields() 
         "failUrl": "https://merchant.example.test/fail",
         "amount": "100.00",
         "installmentNo": "1",
-        "cardHolderName": "PAYNKOLAY TEST",
+        "cardHolderName": "TEST-AUTOMATION",
         "month": "12",
         "year": "2030",
         "cvv": "123",
@@ -458,7 +458,7 @@ async def test_get_transaction_status_from_payment_list_posts_query_and_maps_row
                             "STATUS": "SUCCESS",
                             "TRANSACTION_TYPE": "SALES",
                             "TRX_DATE": "03.07.2026 09:45:00",
-                            "CARD_HOLDER_NAME": "PAYNKOLAY TEST",
+                            "CARD_HOLDER_NAME": "TEST-AUTOMATION",
                             "IS_3D": True,
                             "INSTALLMENT_COUNT": "1",
                             "DESCRIPTION": "",

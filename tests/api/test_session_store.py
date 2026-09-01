@@ -52,7 +52,7 @@ async def test_session_store_creates_sanitized_session() -> None:
         amount=Decimal("100.00"),
         currency=Currency.TRY,
         pan="4111111111111111",
-        card_holder="PAYNKOLAY TEST",
+        card_holder="TEST-AUTOMATION",
         requires_3ds=True,
         installment_count=1,
     )
@@ -75,7 +75,7 @@ async def test_session_store_rejects_duplicate_order_id() -> None:
             amount=Decimal("100.00"),
             currency=Currency.TRY,
             pan="4111111111111111",
-            card_holder="PAYNKOLAY TEST",
+            card_holder="TEST-AUTOMATION",
             requires_3ds=True,
             installment_count=1,
         )
@@ -94,7 +94,7 @@ async def test_session_store_updates_status() -> None:
         amount=Decimal("100.00"),
         currency=Currency.TRY,
         pan="4111111111111111",
-        card_holder="PAYNKOLAY TEST",
+        card_holder="TEST-AUTOMATION",
         requires_3ds=True,
         installment_count=1,
     )

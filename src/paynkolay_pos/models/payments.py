@@ -59,7 +59,7 @@ class PaymentCardInput(StrictPaymentModel):
     expiry_month: int = Field(ge=1, le=12)
     expiry_year: int = Field(ge=2026, le=2100)
     cvv: SecretStr = Field(min_length=3, max_length=4)
-    card_holder: str = Field(default="PAYNKOLAY TEST", min_length=1, max_length=64)
+    card_holder: str = Field(default="TEST-AUTOMATION", min_length=1, max_length=64)
 
     def model_post_init(self, __context: Any) -> None:
         """Validate sensitive numeric fields after SecretStr parsing."""

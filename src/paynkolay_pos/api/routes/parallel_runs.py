@@ -870,7 +870,7 @@ def _payment_form_request(
         currency=currency,
         card_brand=card.brand,
         card_number=card.pan,
-        card_holder="PAYNKOLAY TEST",
+        card_holder="TEST-AUTOMATION",
         expiry_month=card.expiry_month,
         expiry_year=card.expiry_year,
         cvv=card.cvv,
